@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<section name="Workbench">
+	<section name="com.jaspersoft.studio.property.dataset.dialog.DatasetDialog">
+		<item value="1366" key="DIALOG_WIDTH"/>
+		<item value="1|Segoe UI|9.0|0|WINDOWS|1|-12|0|0|0|400|0|0|0|1|0|0|0|0|Segoe UI" key="DIALOG_FONT_NAME"/>
+		<item value="0" key="dialogY"/>
+		<item value="0" key="dialogX"/>
+		<item value="728" key="dialogHeight"/>
+		<item value="1366" key="dialogWidth"/>
+		<item value="728" key="DIALOG_HEIGHT"/>
+		<item value="8" key="DIALOG_X_ORIGIN"/>
+		<item value="8" key="DIALOG_Y_ORIGIN"/>
+	</section>
+	<section name="com.jaspersoft.studio.property.color.chooser.ColorDialog">
+		<item value="618" key="DIALOG_WIDTH"/>
+		<item value="1|Segoe UI|9.0|0|WINDOWS|1|-12|0|0|0|400|0|0|0|1|0|0|0|0|Segoe UI" key="DIALOG_FONT_NAME"/>
+		<item value="70" key="dialogY"/>
+		<item value="374" key="dialogX"/>
+		<item value="442" key="dialogHeight"/>
+		<item value="618" key="dialogWidth"/>
+		<item value="442" key="DIALOG_HEIGHT"/>
+		<item value="382" key="DIALOG_X_ORIGIN"/>
+		<item value="78" key="DIALOG_Y_ORIGIN"/>
+	</section>
+	<section name="com.jaspersoft.studio.property.descriptor.expression.dialog.JRExpressionEditor">
+		<item value="750" key="DIALOG_WIDTH"/>
+		<item value="1|Segoe UI|9.0|0|WINDOWS|1|-12|0|0|0|400|0|0|0|1|0|0|0|0|Segoe UI" key="DIALOG_FONT_NAME"/>
+		<item value="0" key="dialogY"/>
+		<item value="308" key="dialogX"/>
+		<item value="680" key="dialogHeight"/>
+		<item value="750" key="dialogWidth"/>
+		<item value="680" key="DIALOG_HEIGHT"/>
+		<item value="316" key="DIALOG_X_ORIGIN"/>
+		<item value="8" key="DIALOG_Y_ORIGIN"/>
+	</section>
+</section>

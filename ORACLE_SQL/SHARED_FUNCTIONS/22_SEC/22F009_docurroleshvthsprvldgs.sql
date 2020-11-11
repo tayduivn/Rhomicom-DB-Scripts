@@ -1,0 +1,73 @@
+/* Formatted on 12-19-2018 12:48:08 PM (QP5 v5.126.903.23003) */
+CREATE OR REPLACE FUNCTION SEC.DOCURROLESHVTHSPRVLDGS (
+   P_PRVLDGNAMES     VARCHAR2,
+   P_MDLNM           VARCHAR2,
+   P_ROLE_SET_IDS    VARCHAR2
+)
+   RETURN INTEGER
+AS
+   TYPE NUMBERARRAY IS TABLE OF NUMBER
+                          INDEX BY BINARY_INTEGER;
+
+   V_CHKRSLTS   NUMBERARRAY;
+
+   L_COUNT1     NUMBER := 0;
+   CNTR         INTEGER := 0;
+   --I            INTEGER := 0;
+   N            INTEGER := 0;
+--J            VARCHAR2(400);
+BEGIN
+   SELECT   COUNT (1)
+     INTO   L_COUNT1
+     FROM   TABLE (SYSADMIN.DLMTR_TO_TABLE (P_PRVLDGNAMES, '|'));
+
+   CNTR := L_COUNT1;
+
+   WHILE N < L_COUNT1
+   LOOP
+      V_CHKRSLTS (N) := 0;
+      N := N + 1;
+   END LOOP;
+
+
+   N := 0;
+
+   FOR I
+   IN (SELECT   TO_NUMBER (COLUMN_VALUE) COLUMN_VALUE
+         FROM   TABLE (SYSADMIN.DLMTR_TO_TABLE (P_ROLE_SET_IDS, '|')))
+   LOOP
+      FOR J
+      IN (SELECT   COLUMN_VALUE
+            FROM   TABLE (SYSADMIN.DLMTR_TO_TABLE (P_PRVLDGNAMES, '|')))
+      LOOP
+         N := 0;
+
+         IF (SEC.DOESROLEHVTHISPRVLDG (
+                SEC.GET_PRVLDG_ID (J.COLUMN_VALUE, P_MDLNM),
+                I.COLUMN_VALUE
+             ) = 1)
+         THEN
+            V_CHKRSLTS (N) := 1;
+         END IF;
+
+         N := N + 1;
+      END LOOP;
+   END LOOP;
+
+   N := 0;
+
+   WHILE N < L_COUNT1
+   LOOP
+      IF (V_CHKRSLTS (N) = 0)
+      THEN
+         RETURN 0;
+      END IF;
+   END LOOP;
+
+   RETURN 1;
+EXCEPTION
+   WHEN OTHERS
+   THEN
+      RETURN 0;
+END;
+/

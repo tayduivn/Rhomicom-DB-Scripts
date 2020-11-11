@@ -1,0 +1,7 @@
+com.jaspersoft.studio.compatibility.showdialog=true
+com.jaspersoft.studio.compatibility.version=6.2.0
+com.jaspersoft.studio.jr.compile.version=last
+com.jaspersoft.studio.theme.ui.dark=pageBackground\=0,0,0\ncontainerMarginColor\=0,255,0\ngridColor\=255,255,255\nelementDesignBorderColor\=255,255,0\npageMarginColor\=255,0,0\n
+com.jaspersoft.studio.theme.ui.light=pageBackground\=255,255,255\ncontainerMarginColor\=170,168,255\ngridColor\=192,192,192\nelementDesignBorderColor\=0,0,0\npageMarginColor\=170,168,255\n
+eclipse.preferences.version=1
+net.sf.jasperreports.JRPROPERTIES=net.sf.jasperreports.chrome.enabled\=true\ncom.jaspersoft.jasperreports.components.customvisualization.require.js\=file\\\:/C\\\:/Program Files/TIBCO/Jaspersoft Studio-6.14.0/configuration/org.eclipse.osgi/25/0/.cp/resources/scripts/require-2.1.6.src.js\nnet.sf.jasperreports.web.resource.pattern.customvisualization.scripts\=com/jaspersoft/jasperreports/customvisualization/resources/require/.*\nnet.sf.jasperreports.compiler.temp.dir\=C\\\:\\\\Program Files\\\\TIBCO\\\\Jaspersoft Studio-6.14.0\ncom.jaspersoft.jasperreports.components.customvisualization.phantomjs.executable.path\=phantomjs\nnet.sf.jasperreports.compiler.classpath\=C\\\:\\\\Program Files\\\\TIBCO\\\\Jaspersoft Studio-6.14.0\\\\\\\\plugins/org.eclipse.equinox.launcher_1.5.600.v20191014-2022.jar\n

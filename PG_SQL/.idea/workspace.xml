@@ -1,0 +1,204 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="ChangeListManager">
+    <list default="true" id="e1386b6d-ad8c-4ba1-8790-1e5a75e61910" name="Default" comment="" />
+    <option name="SHOW_DIALOG" value="false" />
+    <option name="HIGHLIGHT_CONFLICTS" value="true" />
+    <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
+    <option name="LAST_RESOLUTION" value="IGNORE" />
+  </component>
+  <component name="ExecutionTargetDialog">
+    <checked>
+      <node key="40e26752-9b68-46cb-b355-729b8ca552c1">
+        <node key="all_db_schemas" />
+        <node key="minaize_live" />
+        <node key="pastors_wives" />
+        <node key="rhomicom_live" />
+        <node key="yesco" />
+        <node key="yilostar_live" />
+        <node key="ymp_live" />
+      </node>
+    </checked>
+    <expanded>
+      <node key="40e26752-9b68-46cb-b355-729b8ca552c1" />
+    </expanded>
+  </component>
+  <component name="ProjectId" id="1Rgk4NuBPQVERqJVOLEyUH9nf2v" />
+  <component name="ProjectViewState">
+    <option name="hideEmptyMiddlePackages" value="true" />
+    <option name="showLibraryContents" value="true" />
+  </component>
+  <component name="PropertiesComponent">
+    <property name="DBE.Init.BalloonShown" value="true" />
+    <property name="GoToClass.toSaveIncludeLibraries" value="true" />
+    <property name="RunOnceActivity.OpenProjectViewOnStart" value="true" />
+    <property name="RunOnceActivity.ShowReadmeOnStart" value="true" />
+    <property name="com.intellij.database.dataSource.DataSourceTemplate" value="PostgreSQL" />
+    <property name="com.intellij.ide.scratch.LRUPopupBuilder$1/" value="PostgreSQL" />
+    <property name="database.console.LAST_STATE" value="true" />
+    <property name="ignore.virus.scanning.warn.message" value="true" />
+    <property name="last_opened_file_path" value="$PROJECT_DIR$" />
+    <property name="settings.editor.selected.configurable" value="configurable.group.database.main" />
+  </component>
+  <component name="RecentsManager">
+    <key name="CopyFile.RECENT_KEYS">
+      <recent name="C:\RICHARD\RHOAPPS\DB_OS_SCRIPTS\PG_SQL" />
+      <recent name="$PROJECT_DIR$" />
+    </key>
+  </component>
+  <component name="RunManager" selected="Database Script.new_funcs_mcf1.sql">
+    <configuration name="accb.post_gl_trns.sql" type="DatabaseScript" editBeforeRun="true" temporary="true" nameIsGenerated="true">
+      <script-file value="$PROJECT_DIR$/accb.post_gl_trns.sql" />
+      <script-mode>FILE</script-mode>
+      <data-source id="40e26752-9b68-46cb-b355-729b8ca552c1" namespace="database/&quot;minaize_live&quot;" />
+      <data-source id="40e26752-9b68-46cb-b355-729b8ca552c1" namespace="database/&quot;yesco&quot;" />
+      <data-source id="40e26752-9b68-46cb-b355-729b8ca552c1" namespace="database/&quot;rhomicom_live&quot;" />
+      <data-source id="40e26752-9b68-46cb-b355-729b8ca552c1" namespace="database/&quot;ys_live_new&quot;" />
+      <method v="2" />
+    </configuration>
+    <configuration name="calc_paye_tax.sql" type="DatabaseScript" editBeforeRun="true" singleton="false" temporary="true" nameIsGenerated="true">
+      <script-file value="$PROJECT_DIR$/calc_paye_tax.sql" />
+      <script-mode>FILE</script-mode>
+      <data-source id="40e26752-9b68-46cb-b355-729b8ca552c1" namespace="database/&quot;minaize_live&quot;" />
+      <data-source id="40e26752-9b68-46cb-b355-729b8ca552c1" namespace="database/&quot;rhomicom_live&quot;" />
+      <data-source id="40e26752-9b68-46cb-b355-729b8ca552c1" namespace="database/&quot;yesco&quot;" />
+      <data-source id="40e26752-9b68-46cb-b355-729b8ca552c1" namespace="database/&quot;ys_live_new&quot;" />
+      <method v="2" />
+    </configuration>
+    <configuration name="new_funcs_mcf1.sql" type="DatabaseScript" editBeforeRun="true" singleton="false" temporary="true" nameIsGenerated="true">
+      <script-file value="$PROJECT_DIR$/new_funcs_mcf1.sql" />
+      <script-mode>FILE</script-mode>
+      <data-source id="40e26752-9b68-46cb-b355-729b8ca552c1" namespace="database/&quot;minaize_live&quot;" />
+      <data-source id="40e26752-9b68-46cb-b355-729b8ca552c1" namespace="database/&quot;rhomicom_live&quot;" />
+      <data-source id="40e26752-9b68-46cb-b355-729b8ca552c1" namespace="database/&quot;yesco&quot;" />
+      <data-source id="40e26752-9b68-46cb-b355-729b8ca552c1" namespace="database/&quot;ys_live_nw&quot;" />
+      <data-source id="40e26752-9b68-46cb-b355-729b8ca552c1" namespace="database/&quot;takbogwelfare&quot;" />
+      <data-source id="40e26752-9b68-46cb-b355-729b8ca552c1" namespace="database/&quot;ymp_db&quot;" />
+      <method v="2" />
+    </configuration>
+    <configuration name="new_tables_self_srvc.sql" type="DatabaseScript" editBeforeRun="true" singleton="false" temporary="true" nameIsGenerated="true">
+      <script-file value="$PROJECT_DIR$/new_tables_self_srvc.sql" />
+      <script-mode>FILE</script-mode>
+      <data-source id="40e26752-9b68-46cb-b355-729b8ca552c1" namespace="database/&quot;minaize_live&quot;" />
+      <data-source id="40e26752-9b68-46cb-b355-729b8ca552c1" namespace="database/&quot;rhomicom_live&quot;" />
+      <data-source id="40e26752-9b68-46cb-b355-729b8ca552c1" namespace="database/&quot;takbogwelfare&quot;" />
+      <data-source id="40e26752-9b68-46cb-b355-729b8ca552c1" namespace="database/&quot;yesco&quot;" />
+      <data-source id="40e26752-9b68-46cb-b355-729b8ca552c1" namespace="database/&quot;ys_live_nw&quot;" />
+      <data-source id="40e26752-9b68-46cb-b355-729b8ca552c1" namespace="database/&quot;ymp_db&quot;" />
+      <method v="2" />
+    </configuration>
+    <configuration name="pay.mass_pay_run.sql" type="DatabaseScript" editBeforeRun="true" temporary="true" nameIsGenerated="true">
+      <script-file value="$PROJECT_DIR$/pay.mass_pay_run.sql" />
+      <script-mode>FILE</script-mode>
+      <data-source id="40e26752-9b68-46cb-b355-729b8ca552c1" namespace="database/&quot;minaize_live&quot;" />
+      <data-source id="40e26752-9b68-46cb-b355-729b8ca552c1" namespace="database/&quot;rhomicom_live&quot;" />
+      <data-source id="40e26752-9b68-46cb-b355-729b8ca552c1" namespace="database/&quot;takbogwelfare&quot;" />
+      <data-source id="40e26752-9b68-46cb-b355-729b8ca552c1" namespace="database/&quot;yesco&quot;" />
+      <data-source id="40e26752-9b68-46cb-b355-729b8ca552c1" namespace="database/&quot;ys_live_nw&quot;" />
+      <method v="2" />
+    </configuration>
+    <recent_temporary>
+      <list>
+        <item itemvalue="Database Script.new_funcs_mcf1.sql" />
+        <item itemvalue="Database Script.new_tables_self_srvc.sql" />
+        <item itemvalue="Database Script.pay.mass_pay_run.sql" />
+        <item itemvalue="Database Script.calc_paye_tax.sql" />
+        <item itemvalue="Database Script.accb.post_gl_trns.sql" />
+      </list>
+    </recent_temporary>
+  </component>
+  <component name="SpellCheckerSettings" RuntimeDictionaries="0" Folders="0" CustomDictionaries="0" DefaultDictionary="application-level" UseSingleDictionary="true" transferred="true" />
+  <component name="TodoView" selected-index="2">
+    <todo-panel id="selected-file">
+      <is-autoscroll-to-source value="true" />
+    </todo-panel>
+    <todo-panel id="all">
+      <are-packages-shown value="true" />
+      <is-autoscroll-to-source value="true" />
+    </todo-panel>
+  </component>
+  <component name="WindowStateProjectService">
+    <state x="484" y="61" key="#accb.post_gl_trns.sql" timestamp="1594043338633">
+      <screen x="0" y="0" width="1536" height="824" />
+    </state>
+    <state x="484" y="61" key="#accb.post_gl_trns.sql/0.0.1536.824@0.0.1536.824" timestamp="1594043338633" />
+    <state x="484" y="61" key="#calc_paye_tax.sql" timestamp="1594043517571">
+      <screen x="0" y="0" width="1536" height="824" />
+    </state>
+    <state x="484" y="61" key="#calc_paye_tax.sql/0.0.1536.824@0.0.1536.824" timestamp="1594043517571" />
+    <state x="361" y="70" key="#com.intellij.execution.impl.EditConfigurationsDialog" timestamp="1595025861410">
+      <screen x="0" y="0" width="1536" height="824" />
+    </state>
+    <state x="361" y="70" key="#com.intellij.execution.impl.EditConfigurationsDialog/0.0.1536.824@0.0.1536.824" timestamp="1595025861410" />
+    <state x="449" y="153" key="#com.intellij.openapi.updateSettings.impl.PluginUpdateInfoDialog" timestamp="1596163484116">
+      <screen x="0" y="0" width="1536" height="824" />
+    </state>
+    <state x="449" y="153" key="#com.intellij.openapi.updateSettings.impl.PluginUpdateInfoDialog/0.0.1536.824@0.0.1536.824" timestamp="1596163484116" />
+    <state x="484" y="61" key="#new_funcs_mcf1.sql" timestamp="1595982550001">
+      <screen x="0" y="0" width="1536" height="824" />
+    </state>
+    <state x="484" y="61" key="#new_funcs_mcf1.sql/0.0.1536.824@0.0.1536.824" timestamp="1595982550001" />
+    <state x="484" y="61" key="#new_tables_self_srvc.sql" timestamp="1595964828955">
+      <screen x="0" y="0" width="1536" height="824" />
+    </state>
+    <state x="484" y="61" key="#new_tables_self_srvc.sql/0.0.1536.824@0.0.1536.824" timestamp="1595964828955" />
+    <state x="484" y="61" key="#pay.auto_execute_leave_plns.sql" timestamp="1594043305395">
+      <screen x="0" y="0" width="1536" height="824" />
+    </state>
+    <state x="484" y="61" key="#pay.auto_execute_leave_plns.sql/0.0.1536.824@0.0.1536.824" timestamp="1594043305395" />
+    <state x="484" y="61" key="#pay.mass_pay_run.sql" timestamp="1595982951858">
+      <screen x="0" y="0" width="1536" height="824" />
+    </state>
+    <state x="484" y="61" key="#pay.mass_pay_run.sql/0.0.1536.824@0.0.1536.824" timestamp="1595982951858" />
+    <state x="549" y="167" key="FileChooserDialogImpl" timestamp="1591620102633">
+      <screen x="0" y="0" width="1536" height="824" />
+    </state>
+    <state x="549" y="167" key="FileChooserDialogImpl/0.0.1536.824@0.0.1536.824" timestamp="1591620102633" />
+    <state width="1493" height="141" key="GridCell.Tab.0.bottom" timestamp="1597818139907">
+      <screen x="0" y="0" width="1536" height="824" />
+    </state>
+    <state width="1493" height="141" key="GridCell.Tab.0.bottom/0.0.1536.824@0.0.1536.824" timestamp="1597818139907" />
+    <state width="1493" height="141" key="GridCell.Tab.0.center" timestamp="1597818139906">
+      <screen x="0" y="0" width="1536" height="824" />
+    </state>
+    <state width="1493" height="141" key="GridCell.Tab.0.center/0.0.1536.824@0.0.1536.824" timestamp="1597818139906" />
+    <state width="1493" height="141" key="GridCell.Tab.0.left" timestamp="1597818139906">
+      <screen x="0" y="0" width="1536" height="824" />
+    </state>
+    <state width="1493" height="141" key="GridCell.Tab.0.left/0.0.1536.824@0.0.1536.824" timestamp="1597818139906" />
+    <state width="1493" height="141" key="GridCell.Tab.0.right" timestamp="1597818139906">
+      <screen x="0" y="0" width="1536" height="824" />
+    </state>
+    <state width="1493" height="141" key="GridCell.Tab.0.right/0.0.1536.824@0.0.1536.824" timestamp="1597818139906" />
+    <state x="431" y="145" width="672" height="678" key="search.everywhere.popup" timestamp="1595940887203">
+      <screen x="0" y="0" width="1536" height="824" />
+    </state>
+    <state x="431" y="145" width="672" height="678" key="search.everywhere.popup/0.0.1536.824@0.0.1536.824" timestamp="1595940887203" />
+  </component>
+  <component name="XDebuggerManager">
+    <breakpoint-manager>
+      <breakpoints>
+        <line-breakpoint enabled="true" type="OracleBreakpointType">
+          <url>file://$PROJECT_DIR$/calc_paye_tax.sql</url>
+          <line>2696</line>
+          <option name="timeStamp" value="2" />
+        </line-breakpoint>
+      </breakpoints>
+    </breakpoint-manager>
+  </component>
+  <component name="masterDetails">
+    <states>
+      <state key="ScopeChooserConfigurable.UI">
+        <settings>
+          <splitter-proportions>
+            <option name="proportions">
+              <list>
+                <option value="0.2" />
+              </list>
+            </option>
+          </splitter-proportions>
+        </settings>
+      </state>
+    </states>
+  </component>
+</project>

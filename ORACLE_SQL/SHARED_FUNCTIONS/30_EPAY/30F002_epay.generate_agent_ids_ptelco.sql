@@ -1,0 +1,159 @@
+/* Formatted on 12-19-2018 10:56:04 AM (QP5 v5.126.903.23003) */
+CREATE OR REPLACE FUNCTION EPAY.GENERATE_AGENT_IDS_PTELCO (
+   P_TELCO        VARCHAR2,
+   P_LISTLIMIT    VARCHAR2
+)
+   RETURN NUMBER
+AS
+   V_TELCO             VARCHAR (200) := P_TELCO;
+   V_REGN_CODE         VARCHAR (200) := '';
+   V_CITY_CODE         VARCHAR (200) := '';
+   V_OUTLET_CODE       VARCHAR (200) := '';
+   V_AGENT_SERIAL_NO   VARCHAR (200) := '';
+   V_AGENT_CODE        VARCHAR (200) := '';
+   V_AGENT_FIN_CODE    VARCHAR (200) := '';
+   V_SERIAL_NO         NUMBER := -1;
+   V_LIMIT             NUMBER := P_LISTLIMIT;
+   V_DISTRICT_CODE     VARCHAR2 (200) := '';
+   CNTA                INTEGER := 0;
+BEGIN
+   --SELECT AGENT RECORDS
+   FOR AGENT_LIST
+   IN (SELECT   TBL1.*
+         FROM   (  SELECT   AGENT_NAME,
+                            REGION,
+                            CITY,
+                            TELCO,
+                            MSISDN,
+                            AGENT_NO,
+                            ROW_ID,
+                            ID_TYPE,
+                            ID_NUMBER,
+                            DIGITAL_ADDRESS
+                     FROM   EPAY.EPAY_AGENT_IDS
+                    WHERE       TELCO = V_TELCO
+                            AND AGENT_NO = ''
+                            AND DIGITAL_ADDRESS != ''
+                            AND TELCO_MM_ID NOT IN (141090, 156565, 174761)
+                 ORDER BY   REGION, AGENT_NAME) TBL1
+        WHERE   ROWNUM <= V_LIMIT)
+   LOOP
+      --GET REGION AND DISTRICT CODE AND ASSIGN CODE
+      SELECT   SYMBOL
+        INTO   V_REGN_CODE
+        FROM   EPAY.EPAY_REGIONS
+       WHERE   DAS_SYMBOL = SUBSTR (TRIM (AGENT_LIST.DIGITAL_ADDRESS), 1, 1);
+
+      SELECT   SUBSTR (TRIM (AGENT_LIST.DIGITAL_ADDRESS), 2, 1)
+        INTO   V_DISTRICT_CODE
+        FROM   DUAL;
+
+
+      IF AGENT_LIST.ID_TYPE != '' AND AGENT_LIST.ID_NUMBER != ''
+      THEN
+         /*SELECT DISTINCT AGENT_NO, SERIAL_NO INTO V_AGENT_CODE, V_SERIAL_NO FROM EPAY.EPAY_AGENT_IDS WHERE ID_TYPE = AGENT_LIST.ID_TYPE
+         AND ID_NUMBER = AGENT_LIST.ID_NUMBER AND REGION = AGENT_LIST.REGION;*/
+
+         --GET DISTINCT SERIAL FOR UNIQUE AGENT
+         SELECT   DISTINCT SERIAL_NO
+           INTO   V_SERIAL_NO
+           FROM   EPAY.EPAY_AGENT_IDS
+          WHERE   ID_TYPE = AGENT_LIST.ID_TYPE
+                  AND ID_NUMBER = AGENT_LIST.ID_NUMBER;
+      ELSE
+         --GET AGENT NO
+         /*SELECT DISTINCT AGENT_NO, SERIAL_NO INTO V_AGENT_CODE, V_SERIAL_NO FROM EPAY.EPAY_AGENT_IDS WHERE AGENT_NAME = AGENT_LIST.AGENT_NAME
+         AND REGION = AGENT_LIST.REGION;-- AND AGENT_NO IS NOT NULL AND ROW_ID != AGENT_LIST.ROW_ID;*/
+
+         SELECT   DISTINCT SERIAL_NO
+           INTO   V_SERIAL_NO
+           FROM   EPAY.EPAY_AGENT_IDS
+          WHERE   AGENT_NAME = AGENT_LIST.AGENT_NAME;
+      END IF;
+
+      --GET AGENT CODE FOR ROW RECORD
+
+
+      IF V_SERIAL_NO = -1
+      THEN
+         -- GET LAST SERIAL NUMBER FOR REGION AND DISTRICT
+         SELECT   MAX (SERIAL_NO) INTO V_SERIAL_NO FROM EPAY.EPAY_AGENT_IDS;
+
+         --WHERE REGION = AGENT_LIST.REGION AND SUBSTR(TRIM(AGENT_LIST.DIGITAL_ADDRESS),2,1) = V_DISTRICT_CODE;
+
+         IF V_SERIAL_NO = -1
+         THEN
+            V_AGENT_CODE := '000001';
+            V_SERIAL_NO := 0;
+         ELSE
+            V_AGENT_CODE := LPAD (TRIM ( (V_SERIAL_NO + 1) || ''), 6, '0');
+         END IF;
+
+         V_AGENT_FIN_CODE := V_REGN_CODE || V_DISTRICT_CODE || V_AGENT_CODE;
+
+         IF AGENT_LIST.ID_TYPE != '' AND AGENT_LIST.ID_NUMBER != ''
+         THEN
+            UPDATE   EPAY.EPAY_AGENT_IDS
+               SET   AGENT_NO = V_AGENT_FIN_CODE,
+                     SERIAL_NO = (V_SERIAL_NO + 1)
+             WHERE   1 = 1 AND ROW_ID = AGENT_LIST.ROW_ID;
+         /*
+                   AND ID_TYPE = AGENT_LIST.ID_TYPE
+                   AND ID_NUMBER = AGENT_LIST.ID_NUMBER
+                   AND REGION = AGENT_LIST.REGION
+                   AND SUBSTR(TRIM(AGENT_LIST.DIGITAL_ADDRESS),2,1) = V_DISTRICT_CODE;*/
+
+         ELSE
+            UPDATE   EPAY.EPAY_AGENT_IDS
+               SET   AGENT_NO = V_AGENT_FIN_CODE,
+                     SERIAL_NO = (V_SERIAL_NO + 1)
+             WHERE   1 = 1 AND ROW_ID = AGENT_LIST.ROW_ID;
+         /*
+                   AND AGENT_NAME = AGENT_LIST.AGENT_NAME
+                   AND REGION = AGENT_LIST.REGION
+                   AND SUBSTR(TRIM(AGENT_LIST.DIGITAL_ADDRESS),2,1) = V_DISTRICT_CODE;*/
+
+         END IF;
+      ELSE
+         V_AGENT_CODE := LPAD (TRIM ( (V_SERIAL_NO + 1) || ''), 6, '0');
+         V_AGENT_FIN_CODE := V_REGN_CODE || V_DISTRICT_CODE || V_AGENT_CODE;
+
+         --V_AGENT_FIN_CODE := V_AGENT_CODE;
+
+         IF AGENT_LIST.ID_TYPE != '' AND AGENT_LIST.ID_NUMBER != ''
+         THEN
+            UPDATE   EPAY.EPAY_AGENT_IDS
+               SET   AGENT_NO = V_AGENT_FIN_CODE, SERIAL_NO = V_SERIAL_NO
+             WHERE   1 = 1 AND ROW_ID = AGENT_LIST.ROW_ID;
+         /*
+                   AND ID_TYPE = AGENT_LIST.ID_TYPE
+                   AND ID_NUMBER = AGENT_LIST.ID_NUMBER
+                   AND REGION = AGENT_LIST.REGION
+                   AND SUBSTR(TRIM(AGENT_LIST.DIGITAL_ADDRESS),2,1) = V_DISTRICT_CODE;*/
+
+         ELSE
+            UPDATE   EPAY.EPAY_AGENT_IDS
+               SET   AGENT_NO = V_AGENT_FIN_CODE, SERIAL_NO = V_SERIAL_NO
+             WHERE   1 = 1 AND ROW_ID = AGENT_LIST.ROW_ID;
+         /*
+                   AND AGENT_NAME = AGENT_LIST.AGENT_NAME
+                   AND REGION = AGENT_LIST.REGION
+                   AND SUBSTR(TRIM(AGENT_LIST.DIGITAL_ADDRESS),2,1) = V_DISTRICT_CODE;*/
+
+         END IF;
+      END IF;
+
+      --AND ROW_ID = AGENT_LIST.ROW_ID;
+
+      --RETURN AGENT_LIST.AGENT_NAME||', '||AGENT_LIST.REGION||', '||AGENT_LIST.CITY||', '||AGENT_LIST.MSISDN;
+      CNTA := CNTA + 1;
+   END LOOP;
+
+   RETURN CNTA;
+EXCEPTION
+   WHEN OTHERS
+   THEN
+      DBMS_OUTPUT.PUT_LINE ('ERROR ' || SQLCODE || CHR (10) || SQLERRM);
+      RETURN -1;
+END;
+/

@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="SqlDialectMappings">
+    <file url="file://$PROJECT_DIR$/1.sql" dialect="PostgreSQL" />
+    <file url="file://$PROJECT_DIR$/2.sql" dialect="PostgreSQL" />
+    <file url="file://$PROJECT_DIR$/accb.invoice_payment.sql" dialect="PostgreSQL" />
+    <file url="file://$PROJECT_DIR$/accb.populate_cash_book.sql" dialect="PostgreSQL" />
+    <file url="file://$PROJECT_DIR$/accb.populate_pnl.sql" dialect="PostgreSQL" />
+    <file url="file://$PROJECT_DIR$/accb.populate_prd_by_prd_bals.sql" dialect="PostgreSQL" />
+    <file url="file://$PROJECT_DIR$/accb.populate_trial_bals.sql" dialect="PostgreSQL" />
+    <file url="file://$PROJECT_DIR$/calc_paye_tax.sql" dialect="PostgreSQL" />
+    <file url="file://$PROJECT_DIR$/first_time_setups.sql" dialect="PostgreSQL" />
+    <file url="file://$PROJECT_DIR$/new_functions1.sql" dialect="PostgreSQL" />
+    <file url="file://$PROJECT_DIR$/new_tables_columns1.sql" dialect="PostgreSQL" />
+    <file url="file://$PROJECT_DIR$/pay.mass_pay_run.sql" dialect="PostgreSQL" />
+    <file url="file://$PROJECT_DIR$/pay.pay_gl_interface.sql" dialect="PostgreSQL" />
+    <file url="file://$PROJECT_DIR$/vms.populate_smry_bin_card.sql" dialect="PostgreSQL" />
+  </component>
+</project>

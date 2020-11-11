@@ -1,0 +1,29 @@
+/* Formatted on 12-19-2018 12:12:24 PM (QP5 v5.126.903.23003) */
+CREATE OR REPLACE FUNCTION SEC.GET_ASGND_MDLS (P_PERSON_ID NUMBER)
+   RETURN INTEGER
+AS
+   L_RESULT   INTEGER := 0;
+BEGIN
+   SELECT   COUNT (DISTINCT F.MODULE_ID)
+     INTO   L_RESULT
+     FROM   SEC.SEC_USERS A,
+            SEC.SEC_USERS_N_ROLES B,
+            SEC.SEC_ROLES_N_PRVLDGS E,
+            SEC.SEC_PRVLDGS F
+    WHERE       A.USER_ID = B.USER_ID
+            AND B.ROLE_ID = E.ROLE_ID
+            AND F.PRVLDG_ID = E.PRVLDG_ID
+            AND A.PERSON_ID = P_PERSON_ID
+            AND TO_CHAR (SYSDATE, 'YYYY-MM-DD HH24:MI:SS') BETWEEN B.VALID_START_DATE
+                                                               AND  B.VALID_END_DATE
+            AND TO_CHAR (SYSDATE, 'YYYY-MM-DD HH24:MI:SS') BETWEEN E.VALID_START_DATE
+                                                               AND  E.VALID_END_DATE
+            AND UPPER (F.PRVLDG_NAME) LIKE UPPER ('View%');
+
+   RETURN COALESCE (L_RESULT, 0);
+EXCEPTION
+   WHEN OTHERS
+   THEN
+      RETURN 0;
+END;
+/

@@ -1,0 +1,900 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Created with Jaspersoft Studio version 6.3.0.final using JasperReports Library version 6.3.0  -->
+<!-- 2018-02-18T22:54:41 -->
+<jasperReport xmlns="http://jasperreports.sourceforge.net/jasperreports" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://jasperreports.sourceforge.net/jasperreports http://jasperreports.sourceforge.net/xsd/jasperreport.xsd" name="Blank_A4_1" pageWidth="1500" pageHeight="595" orientation="Landscape" columnWidth="1460" leftMargin="20" rightMargin="20" topMargin="20" bottomMargin="20" uuid="fc93effa-866b-4566-90f3-b26c586d5f9d">
+	<property name="com.jaspersoft.studio.data.defaultdataadapter" value="New Data Adapter "/>
+	<property name="com.jaspersoft.studio.data.sql.tables" value=""/>
+	<property name="com.jaspersoft.studio.unit." value="pixel"/>
+	<style name="Table_TH" mode="Opaque" backcolor="#F0F8FF">
+		<box>
+			<pen lineWidth="0.5" lineColor="#000000"/>
+			<topPen lineWidth="0.5" lineColor="#000000"/>
+			<leftPen lineWidth="0.5" lineColor="#000000"/>
+			<bottomPen lineWidth="0.5" lineColor="#000000"/>
+			<rightPen lineWidth="0.5" lineColor="#000000"/>
+		</box>
+	</style>
+	<style name="Table_TD" mode="Opaque" backcolor="#FFFFFF">
+		<box>
+			<pen lineWidth="0.5" lineColor="#000000"/>
+			<topPen lineWidth="0.5" lineColor="#000000"/>
+			<leftPen lineWidth="0.5" lineColor="#000000"/>
+			<bottomPen lineWidth="0.5" lineColor="#000000"/>
+			<rightPen lineWidth="0.5" lineColor="#000000"/>
+		</box>
+	</style>
+	<style name="Table_CH" mode="Opaque" backcolor="#BFE1FF">
+		<box>
+			<pen lineWidth="0.5" lineColor="#000000"/>
+			<topPen lineWidth="0.5" lineColor="#000000"/>
+			<leftPen lineWidth="0.5" lineColor="#000000"/>
+			<bottomPen lineWidth="0.5" lineColor="#000000"/>
+			<rightPen lineWidth="0.5" lineColor="#000000"/>
+		</box>
+	</style>
+	<style name="Table 1_TH" mode="Opaque" backcolor="#F0F8FF">
+		<box>
+			<pen lineWidth="0.5" lineColor="#000000"/>
+			<topPen lineWidth="0.5" lineColor="#000000"/>
+			<leftPen lineWidth="0.5" lineColor="#000000"/>
+			<bottomPen lineWidth="0.5" lineColor="#000000"/>
+			<rightPen lineWidth="0.5" lineColor="#000000"/>
+		</box>
+	</style>
+	<subDataset name="Dataset1" uuid="8d73a75e-6c6f-4ccc-9cf9-d1706b034459">
+		<property name="com.jaspersoft.studio.data.sql.tables" value=""/>
+		<property name="com.jaspersoft.studio.data.defaultdataadapter" value="New Data Adapter "/>
+		<queryString>
+			<![CDATA[SELECT
+row_number() over (order by 1 ASC, 2 ASC, tbl1.schedule_id ASC) as "No.",  tbl1.*
+FROM (SELECT
+org.get_site_code_desc(a.branch_id::integer) branch,
+CASE WHEN a.cust_type = 'Group' AND a.grp_cust_id > 0 THEN mcf.get_customer_name(a.cust_type, a.cust_id)||' ('||mcf.get_cust_local_idno(a.cust_id)||')'||' [Group: '||mcf.get_customer_name(a.cust_type, a.grp_cust_id)||']'
+ELSE mcf.get_customer_name_LastNameFirst(a.cust_type, a.cust_id)||' ('||mcf.get_cust_local_idno(a.cust_id)||')' END                 "Customer Name",
+a.cust_type "Customer Type",
+b.product_code||'.'||product_desc "Loan Product",
+to_char(to_timestamp(f.repay_date,'YYYY-MM-DD'),'DD-Mon-YYYY') "payment_date",
+iso_code "Currency",
+f.begining_bal "Begining Balance",
+f.interest_amnt "Interest Balance",
+f.principal_amnt "Principal Balance",
+f.ending_bal "Ending Balance",
+mcf.get_cust_account_number(a.account_id) "Loan Account",
+round((f.interest_amnt + f.principal_amnt),2) "Periodic Payment",
+f.schedule_id
+ FROM mcf.mcf_loan_request a INNER JOIN mcf.mcf_prdt_loans b ON a.loan_product_id = b.loan_product_id
+INNER JOIN mcf.mcf_loan_disbursement_det c ON c.loan_rqst_id = a.loan_rqst_id
+INNER JOIN mcf.mcf_loan_disbursement_hdr d ON c.disbmnt_hdr_id = d.disbmnt_hdr_id
+INNER JOIN mcf.mcf_currencies e ON b.currency_id = e.crncy_id
+INNER JOIN mcf.mcf_loan_schedule f ON f.disbmnt_det_id = c.disbmnt_det_id
+WHERE  1 = 1
+  AND c.disbmnt_det_id = COALESCE(NULLIF(7513,-1),c.disbmnt_det_id)    
+  AND b.currency_id = e.crncy_id
+  AND c.ttl_tenor_bal > 0 AND repayment_type = 'Account Deductions' AND is_disbursed = 'YES'
+  AND a.status = 'Approved' AND d.status = 'Disbursed' AND c.principal_amount > 0
+  AND a.crdt_type = 'Loan' 
+ORDER BY c.disbmnt_det_id asc
+)tbl1]]>
+		</queryString>
+		<field name="No." class="java.lang.Long"/>
+		<field name="branch" class="java.lang.String"/>
+		<field name="Customer Name" class="java.lang.String"/>
+		<field name="Customer Type" class="java.lang.String"/>
+		<field name="Loan Product" class="java.lang.String"/>
+		<field name="payment_date" class="java.lang.String"/>
+		<field name="Currency" class="java.lang.String"/>
+		<field name="Begining Balance" class="java.math.BigDecimal"/>
+		<field name="Interest Balance" class="java.math.BigDecimal"/>
+		<field name="Principal Balance" class="java.math.BigDecimal"/>
+		<field name="Ending Balance" class="java.math.BigDecimal"/>
+		<field name="Loan Account" class="java.lang.String"/>
+		<field name="Periodic Payment" class="java.math.BigDecimal"/>
+		<field name="schedule_id" class="java.lang.Long"/>
+	</subDataset>
+	<parameter name="P_ImageUrl" class="java.lang.String">
+		<parameterDescription><![CDATA[ImageUrl]]></parameterDescription>
+	</parameter>
+	<parameter name="P_ReportTitle" class="java.lang.String"/>
+	<parameter name="P_OrgName" class="java.lang.String">
+		<parameterDescription><![CDATA[]]></parameterDescription>
+	</parameter>
+	<parameter name="P_OrgAddress" class="java.lang.String">
+		<parameterDescription><![CDATA[]]></parameterDescription>
+	</parameter>
+	<parameter name="P_ContactInfo" class="java.lang.String">
+		<parameterDescription><![CDATA[]]></parameterDescription>
+	</parameter>
+	<parameter name="P_WebEmail" class="java.lang.String">
+		<parameterDescription><![CDATA[]]></parameterDescription>
+	</parameter>
+	<queryString>
+		<![CDATA[SELECT
+row_number() over (order by 1 ASC, 2 ASC, 7 DESC) as "No.", tbl1.*
+FROM (SELECT
+id_no "Client Number",
+CASE WHEN a.cust_type = 'Group' AND a.grp_cust_id > 0 THEN mcf.get_customer_name(grp_applicant_type, a.cust_id)
+ELSE mcf.get_customer_name_LastNameFirst(a.cust_type, a.cust_id) END "Client Name",
+mcf.get_cust_account_number(account_id) "Account Number", 
+b.product_code||'.'||product_desc "Loan Product",
+round(c.principal_amount,2) "Original Loan Amount",
+round(mcf.calc_loan_ttl_bal(a.loan_rqst_id::INTEGER,'PRINCIPAL OUTSTANDING'),2) "Loan Principal Balance(Without Interest)",
+to_char(to_timestamp(disbmnt_date,'YYYY-MM-DD'),'DD-Mon-YYYY') "Loan Disbursement Date",
+(Select to_char(to_timestamp(MAX(repay_date),'YYYY-MM-DD'),'DD-Mon-YYYY') FROM mcf.mcf_loan_schedule x WHERE x.disbmnt_det_id = c.disbmnt_det_id) "Loan Maturity/Expiry Date",
+(Select count(*) FROM mcf.mcf_loan_schedule x WHERE x.disbmnt_det_id = c.disbmnt_det_id) "No. Of. Payments Agreed",
+to_char(to_timestamp(repay_start_date,'YYYY-MM-DD'),'DD-Mon-YYYY') "Agreed Date of First Principal",
+CASE WHEN (Select to_char(to_timestamp(actual_repay_date,'YYYY-MM-DD'),'DD-Mon-YYYY') FROM mcf.mcf_loan_schedule z
+    WHERE 1 = 1
+          AND z.disbmnt_det_id = c.disbmnt_det_id
+          AND upper(z.is_paid) IN ('YES','PARTIAL')
+          AND principal_amnt_paid > 0
+    ORDER BY z.repay_date DESC
+    LIMIT 1) IS NULL THEN '' ELSE (Select to_char(to_timestamp(actual_repay_date,'YYYY-MM-DD'),'DD-Mon-YYYY')  FROM mcf.mcf_loan_schedule z
+    WHERE 1 = 1
+          AND z.disbmnt_det_id = c.disbmnt_det_id
+          AND upper(z.is_paid) IN ('YES','PARTIAL')
+          AND principal_amnt_paid > 0
+    ORDER BY z.repay_date DESC
+    LIMIT 1) END "Date of Last Actual Principal Repayment",
+CASE WHEN (Select principal_amnt_paid FROM mcf.mcf_loan_schedule z
+    WHERE 1 = 1
+          AND z.disbmnt_det_id = c.disbmnt_det_id
+          AND upper(z.is_paid) IN ('YES','PARTIAL')
+          AND principal_amnt_paid > 0
+    ORDER BY z.repay_date DESC
+    LIMIT 1) IS NULL THEN 0 ELSE (Select principal_amnt_paid FROM mcf.mcf_loan_schedule z
+    WHERE 1 = 1
+          AND z.disbmnt_det_id = c.disbmnt_det_id
+          AND upper(z.is_paid) IN ('YES','PARTIAL')
+          AND principal_amnt_paid > 0
+    ORDER BY z.repay_date DESC
+    LIMIT 1) END "Amount of Last Actual Principal Repayment",    
+CASE WHEN b.loan_repayment_type = 'daily' THEN 'Daily' 
+WHEN b.loan_repayment_type = 'weekly' THEN 'Weekly' 
+WHEN b.loan_repayment_type = 'biweekly' THEN 'Every 2 Weeks' 
+WHEN b.loan_repayment_type = 'halfmonth' THEN 'Half Monthly' 
+WHEN b.loan_repayment_type = 'month' THEN 'Monthly' 
+WHEN b.loan_repayment_type = 'quarter' THEN 'Quarterly' 
+WHEN b.loan_repayment_type = 'halfyear' THEN 'Semi-Annually'
+ELSE 'Yearly' END "Frequency",  
+CASE WHEN (SELECT EXTRACT(DAY FROM (to_timestamp(mcf.xx_get_start_of_day_date(1),'YYYY-MM-DD') - to_timestamp(z.repay_date,'YYYY-MM-DD'))) :: INTEGER
+    FROM mcf.mcf_loan_schedule z
+    WHERE 1 = 1
+          AND z.disbmnt_det_id = c.disbmnt_det_id
+          AND upper(z.is_paid) IN ('NO', 'PARTIAL')
+    ORDER BY z.repay_date ASC
+    LIMIT 1) > 0 THEN (SELECT EXTRACT(DAY FROM (to_timestamp(mcf.xx_get_start_of_day_date(1),'YYYY-MM-DD') - to_timestamp(z.repay_date,'YYYY-MM-DD'))) :: INTEGER
+    FROM mcf.mcf_loan_schedule z
+    WHERE 1 = 1
+          AND z.disbmnt_det_id = c.disbmnt_det_id
+          AND upper(z.is_paid) IN ('NO', 'PARTIAL')
+    ORDER BY z.repay_date ASC
+    LIMIT 1) ELSE 0 END "Days in Arreas",
+CASE WHEN a.cust_type = 'Group' THEN 'Group Guarantee and Cash' else 'Guarantors and Cash' END "Type of Security",
+CASE WHEN (SELECT round(coalesce(amount,0.00),2) from mcf.mcf_account_liens
+WHERE account_id = a.cash_collateral_id
+and loan_rqst_id = a.loan_rqst_id) IS NULL THEN round((0.2*c.principal_amount),2) ELSE 
+(SELECT round(coalesce(amount,0.00),2) from mcf.mcf_account_liens
+WHERE account_id = a.cash_collateral_id
+and loan_rqst_id = a.loan_rqst_id) END "Value of Security",
+0.00 "Provisions",
+org.get_site_name(a.branch_id::integer) "Branch Number",
+round(a.apprvd_interest_rate,2) "Interest Rate (%) PA",
+prs.get_prsn_name(rcvry_officer_prsn_id) "Loan Officer",
+CASE WHEN org.get_site_name(a.branch_id::integer) = '001' THEN 'David Nii Boi Clottey'
+WHEN org.get_site_name(a.branch_id::integer) = '002' THEN 'Emmanuel Kwetey'
+WHEN org.get_site_name(a.branch_id::integer) = '003' THEN 'Martin Agyeman'
+WHEN org.get_site_name(a.branch_id::integer) = '004' THEN 'Michael Adjartey Dumanya'
+WHEN org.get_site_name(a.branch_id::integer) = '005' THEN 'John Otoo'
+END "Branch Manager",
+c.disbmnt_det_id,
+a.loan_rqst_id
+FROM mcf.mcf_loan_request a INNER JOIN mcf.mcf_prdt_loans b ON a.loan_product_id = b.loan_product_id
+INNER JOIN mcf.mcf_loan_disbursement_det c ON c.loan_rqst_id = a.loan_rqst_id
+INNER JOIN mcf.mcf_loan_disbursement_hdr d ON c.disbmnt_hdr_id = d.disbmnt_hdr_id
+INNER JOIN mcf.mcf_currencies e ON b.currency_id = e.crncy_id
+INNER JOIN mcf.mcf_customers f ON a.cust_id = f.cust_id
+WHERE  1 = 1
+  AND b.currency_id = e.crncy_id
+ AND repayment_type = 'Account Deductions' AND is_disbursed = 'YES'
+ AND a.status = 'Approved' AND d.status = 'Disbursed' AND c.principal_amount > 0
+ AND a.crdt_type = 'Loan'
+ AND a.branch_id = COALESCE(NULLIF(4,-1),a.branch_id)
+ AND e.iso_code = 'GHS'
+ORDER BY c.disbmnt_det_id asc
+)tbl1]]>
+	</queryString>
+	<field name="No." class="java.lang.Long"/>
+	<field name="Client Number" class="java.lang.String"/>
+	<field name="Client Name" class="java.lang.String"/>
+	<field name="Account Number" class="java.lang.String"/>
+	<field name="Loan Product" class="java.lang.String"/>
+	<field name="Original Loan Amount" class="java.math.BigDecimal"/>
+	<field name="Loan Principal Balance(Without Interest)" class="java.math.BigDecimal"/>
+	<field name="Loan Disbursement Date" class="java.lang.String"/>
+	<field name="Loan Maturity/Expiry Date" class="java.lang.String"/>
+	<field name="No. Of. Payments Agreed" class="java.lang.Long"/>
+	<field name="Agreed Date of First Principal" class="java.lang.String"/>
+	<field name="Date of Last Actual Principal Repayment" class="java.lang.String"/>
+	<field name="Amount of Last Actual Principal Repayment" class="java.math.BigDecimal"/>
+	<field name="Frequency" class="java.lang.String"/>
+	<field name="Days in Arreas" class="java.lang.Integer"/>
+	<field name="Type of Security" class="java.lang.String"/>
+	<field name="Value of Security" class="java.math.BigDecimal"/>
+	<field name="Provisions" class="java.math.BigDecimal"/>
+	<field name="Branch Number" class="java.lang.String"/>
+	<field name="Interest Rate (%) PA" class="java.math.BigDecimal"/>
+	<field name="Loan Officer" class="java.lang.String"/>
+	<field name="Branch Manager" class="java.lang.String"/>
+	<field name="disbmnt_det_id" class="java.lang.Long"/>
+	<field name="loan_rqst_id" class="java.lang.Long"/>
+	<variable name="vAmountPaid" class="java.lang.Number" calculation="Sum"/>
+	<background>
+		<band splitType="Stretch"/>
+	</background>
+	<title>
+		<band height="87" splitType="Stretch">
+			<textField isBlankWhenNull="true">
+				<reportElement x="110" y="-7" width="1350" height="25" uuid="e22419e0-d864-43d7-a261-2c437181309d"/>
+				<textElement textAlignment="Right">
+					<font size="16" isBold="true"/>
+				</textElement>
+				<textFieldExpression><![CDATA[$P{P_ReportTitle}]]></textFieldExpression>
+			</textField>
+			<textField isBlankWhenNull="true">
+				<reportElement x="110" y="17" width="1350" height="25" uuid="9fac8441-c4da-4144-ba04-353029b97219"/>
+				<textElement textAlignment="Right">
+					<font size="14" isBold="true"/>
+				</textElement>
+				<textFieldExpression><![CDATA[$P{P_OrgName}]]></textFieldExpression>
+			</textField>
+			<textField isBlankWhenNull="true">
+				<reportElement x="110" y="42" width="1350" height="15" uuid="6ff46022-1b19-4d85-b3d4-6c89f379cba6"/>
+				<textElement textAlignment="Right">
+					<font size="10" isBold="false" isItalic="false"/>
+				</textElement>
+				<textFieldExpression><![CDATA[$P{P_OrgAddress}]]></textFieldExpression>
+			</textField>
+			<textField isBlankWhenNull="true">
+				<reportElement x="110" y="57" width="1350" height="15" uuid="b4f76c44-7654-4533-a8cb-5c00dd825c18"/>
+				<textElement textAlignment="Right">
+					<font size="10" isBold="false" isItalic="false"/>
+				</textElement>
+				<textFieldExpression><![CDATA[$P{P_ContactInfo}]]></textFieldExpression>
+			</textField>
+			<textField isBlankWhenNull="true">
+				<reportElement x="110" y="72" width="1350" height="15" uuid="19aaf65c-59f5-4505-940d-b2465407e108"/>
+				<textElement textAlignment="Right">
+					<font size="10" isBold="false" isItalic="false"/>
+				</textElement>
+				<textFieldExpression><![CDATA[$P{P_WebEmail}]]></textFieldExpression>
+			</textField>
+			<image hAlign="Center">
+				<reportElement x="0" y="-12" width="110" height="94" uuid="7bfccf74-4e57-4ae1-b74d-2001b58dd44a"/>
+				<imageExpression><![CDATA[$P{P_ImageUrl}]]></imageExpression>
+			</image>
+		</band>
+	</title>
+	<pageHeader>
+		<band height="1" splitType="Stretch">
+			<property name="com.jaspersoft.studio.unit.height" value="pixel"/>
+		</band>
+	</pageHeader>
+	<columnHeader>
+		<band height="54" splitType="Stretch">
+			<property name="com.jaspersoft.studio.unit.height" value="pixel"/>
+			<staticText>
+				<reportElement mode="Opaque" x="0" y="0" width="65" height="49" forecolor="#FFFFFF" backcolor="#06688F" uuid="4da5fa3b-8d27-4cb6-bab9-528db55e085b">
+					<property name="com.jaspersoft.studio.unit.width" value="pixel"/>
+				</reportElement>
+				<box>
+					<topPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+					<leftPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+					<bottomPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+					<rightPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+				</box>
+				<textElement textAlignment="Center">
+					<font size="10"/>
+				</textElement>
+				<text><![CDATA[Client No]]></text>
+			</staticText>
+			<staticText>
+				<reportElement mode="Opaque" x="65" y="0" width="120" height="49" forecolor="#FFFFFF" backcolor="#06688F" uuid="4d3a47df-ef37-47f2-a992-5e0928d45ff2">
+					<property name="com.jaspersoft.studio.unit.width" value="pixel"/>
+					<property name="com.jaspersoft.studio.unit.x" value="pixel"/>
+				</reportElement>
+				<box>
+					<topPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+					<leftPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+					<bottomPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+					<rightPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+				</box>
+				<textElement textAlignment="Center">
+					<font size="10"/>
+				</textElement>
+				<text><![CDATA[Client Name]]></text>
+			</staticText>
+			<staticText>
+				<reportElement mode="Opaque" x="710" y="0" width="78" height="49" forecolor="#FFFFFF" backcolor="#06688F" uuid="a76d5a15-20fc-4c1a-b961-e7075445ac51">
+					<property name="com.jaspersoft.studio.unit.height" value="pixel"/>
+				</reportElement>
+				<box>
+					<topPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+					<leftPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+					<bottomPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+					<rightPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+				</box>
+				<textElement textAlignment="Center">
+					<font size="10"/>
+				</textElement>
+				<text><![CDATA[Date of Last Actual Principal Repayment]]></text>
+			</staticText>
+			<staticText>
+				<reportElement mode="Opaque" x="350" y="0" width="69" height="49" forecolor="#FFFFFF" backcolor="#06688F" uuid="a7157899-58b5-4356-9883-045320d04516"/>
+				<box>
+					<topPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+					<leftPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+					<bottomPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+					<rightPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+				</box>
+				<textElement textAlignment="Center">
+					<font size="10"/>
+				</textElement>
+				<text><![CDATA[Original Loan Amount]]></text>
+			</staticText>
+			<staticText>
+				<reportElement mode="Opaque" x="488" y="0" width="52" height="49" forecolor="#FFFFFF" backcolor="#06688F" uuid="93d2b23c-06d1-4cda-850b-3ab5ac725911">
+					<property name="com.jaspersoft.studio.unit.width" value="pixel"/>
+				</reportElement>
+				<box>
+					<topPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+					<leftPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+					<bottomPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+					<rightPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+				</box>
+				<textElement textAlignment="Center">
+					<font size="10"/>
+				</textElement>
+				<text><![CDATA[Loan Disbursement Date]]></text>
+			</staticText>
+			<staticText>
+				<reportElement mode="Opaque" x="285" y="0" width="65" height="49" forecolor="#FFFFFF" backcolor="#06688F" uuid="863c5958-b238-4383-b990-e473af741747">
+					<property name="com.jaspersoft.studio.unit.x" value="pixel"/>
+					<property name="com.jaspersoft.studio.unit.width" value="pixel"/>
+				</reportElement>
+				<box>
+					<topPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+					<leftPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+					<bottomPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+					<rightPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+				</box>
+				<textElement textAlignment="Center">
+					<font size="10"/>
+				</textElement>
+				<text><![CDATA[Loan Product]]></text>
+			</staticText>
+			<staticText>
+				<reportElement mode="Opaque" x="419" y="0" width="69" height="49" forecolor="#FFFFFF" backcolor="#06688F" uuid="c6db12fa-9aec-4b13-ac21-149f53dcfc4a"/>
+				<box>
+					<topPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+					<leftPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+					<bottomPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+					<rightPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+				</box>
+				<textElement textAlignment="Center">
+					<font size="10"/>
+				</textElement>
+				<text><![CDATA[Loan Principal Balance (Without Interest)]]></text>
+			</staticText>
+			<staticText>
+				<reportElement mode="Opaque" x="185" y="0" width="100" height="49" forecolor="#FFFFFF" backcolor="#06688F" uuid="b6dc35f0-8efa-4a21-90f4-0e1491cb008d">
+					<property name="com.jaspersoft.studio.unit.width" value="pixel"/>
+				</reportElement>
+				<box>
+					<topPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+					<leftPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+					<bottomPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+					<rightPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+				</box>
+				<textElement textAlignment="Center">
+					<font size="10"/>
+				</textElement>
+				<text><![CDATA[Account Number]]></text>
+			</staticText>
+			<staticText>
+				<reportElement mode="Opaque" x="540" y="0" width="52" height="49" forecolor="#FFFFFF" backcolor="#06688F" uuid="352276ac-0235-43ba-891e-f0921d559a1d">
+					<property name="com.jaspersoft.studio.unit.width" value="pixel"/>
+				</reportElement>
+				<box>
+					<topPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+					<leftPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+					<bottomPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+					<rightPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+				</box>
+				<textElement textAlignment="Center">
+					<font size="10"/>
+				</textElement>
+				<text><![CDATA[Loan Maturity/Expiry Date]]></text>
+			</staticText>
+			<staticText>
+				<reportElement mode="Opaque" x="592" y="0" width="58" height="49" forecolor="#FFFFFF" backcolor="#06688F" uuid="576b422c-cd1c-4a37-85ca-2d68c9a7f729">
+					<property name="com.jaspersoft.studio.unit.width" value="pixel"/>
+				</reportElement>
+				<box>
+					<topPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+					<leftPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+					<bottomPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+					<rightPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+				</box>
+				<textElement textAlignment="Center">
+					<font size="10"/>
+				</textElement>
+				<text><![CDATA[No. Of. Payments Agreed]]></text>
+			</staticText>
+			<staticText>
+				<reportElement mode="Opaque" x="650" y="0" width="60" height="49" forecolor="#FFFFFF" backcolor="#06688F" uuid="a1159718-85e4-4792-b40b-5e53db02f1ca">
+					<property name="com.jaspersoft.studio.unit.y" value="pixel"/>
+					<property name="com.jaspersoft.studio.unit.height" value="pixel"/>
+				</reportElement>
+				<box>
+					<topPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+					<leftPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+					<bottomPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+					<rightPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+				</box>
+				<textElement textAlignment="Center">
+					<font size="10"/>
+				</textElement>
+				<text><![CDATA[Agreed Date of First Principal]]></text>
+			</staticText>
+			<staticText>
+				<reportElement mode="Opaque" x="788" y="0" width="80" height="49" forecolor="#FFFFFF" backcolor="#06688F" uuid="75818891-db9d-4950-82dd-67ae681c6c94">
+					<property name="com.jaspersoft.studio.unit.height" value="pixel"/>
+				</reportElement>
+				<box>
+					<topPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+					<leftPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+					<bottomPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+					<rightPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+				</box>
+				<textElement textAlignment="Center">
+					<font size="10"/>
+				</textElement>
+				<text><![CDATA[Amount of Last Actual Principal Repayment]]></text>
+			</staticText>
+			<staticText>
+				<reportElement mode="Opaque" x="868" y="0" width="50" height="49" forecolor="#FFFFFF" backcolor="#06688F" uuid="6b46ec4f-3465-40d9-948b-3275b1de9b39">
+					<property name="com.jaspersoft.studio.unit.height" value="pixel"/>
+				</reportElement>
+				<box>
+					<topPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+					<leftPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+					<bottomPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+					<rightPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+				</box>
+				<textElement textAlignment="Center">
+					<font size="10"/>
+				</textElement>
+				<text><![CDATA[Frequency]]></text>
+			</staticText>
+			<staticText>
+				<reportElement mode="Opaque" x="918" y="0" width="40" height="49" forecolor="#FFFFFF" backcolor="#06688F" uuid="f379ffad-491d-4ced-95e9-8a87de0e052b">
+					<property name="com.jaspersoft.studio.unit.height" value="pixel"/>
+				</reportElement>
+				<box>
+					<topPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+					<leftPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+					<bottomPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+					<rightPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+				</box>
+				<textElement textAlignment="Center">
+					<font size="10"/>
+				</textElement>
+				<text><![CDATA[Days In Areas]]></text>
+			</staticText>
+			<staticText>
+				<reportElement mode="Opaque" x="1050" y="0" width="50" height="49" forecolor="#FFFFFF" backcolor="#06688F" uuid="07f93642-2b0a-44d3-a215-51e4ae2669ad">
+					<property name="com.jaspersoft.studio.unit.height" value="pixel"/>
+				</reportElement>
+				<box>
+					<topPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+					<leftPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+					<bottomPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+					<rightPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+				</box>
+				<textElement textAlignment="Center">
+					<font size="10"/>
+				</textElement>
+				<text><![CDATA[Value of Security]]></text>
+			</staticText>
+			<staticText>
+				<reportElement mode="Opaque" x="1100" y="0" width="50" height="49" forecolor="#FFFFFF" backcolor="#06688F" uuid="63cf8cd3-3f8f-4f67-b9a6-a37c121c4b7e">
+					<property name="com.jaspersoft.studio.unit.height" value="pixel"/>
+				</reportElement>
+				<box>
+					<topPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+					<leftPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+					<bottomPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+					<rightPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+				</box>
+				<textElement textAlignment="Center">
+					<font size="10"/>
+				</textElement>
+				<text><![CDATA[Provisions]]></text>
+			</staticText>
+			<staticText>
+				<reportElement mode="Opaque" x="1150" y="0" width="50" height="49" forecolor="#FFFFFF" backcolor="#06688F" uuid="1cf50c89-3f3c-49b8-9384-31ef8396e3d6">
+					<property name="com.jaspersoft.studio.unit.height" value="pixel"/>
+				</reportElement>
+				<box>
+					<topPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+					<leftPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+					<bottomPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+					<rightPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+				</box>
+				<textElement textAlignment="Center">
+					<font size="10"/>
+				</textElement>
+				<text><![CDATA[Branch Number]]></text>
+			</staticText>
+			<staticText>
+				<reportElement mode="Opaque" x="1200" y="0" width="49" height="49" forecolor="#FFFFFF" backcolor="#06688F" uuid="e384bfbf-aba8-4841-909f-ef32b63c353a">
+					<property name="com.jaspersoft.studio.unit.height" value="pixel"/>
+				</reportElement>
+				<box>
+					<topPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+					<leftPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+					<bottomPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+					<rightPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+				</box>
+				<textElement textAlignment="Center">
+					<font size="10"/>
+				</textElement>
+				<text><![CDATA[Interest Rate (%) (PA)]]></text>
+			</staticText>
+			<staticText>
+				<reportElement mode="Opaque" x="1249" y="0" width="101" height="49" forecolor="#FFFFFF" backcolor="#06688F" uuid="a75caace-d5b2-4101-9130-3d4b564fff7b">
+					<property name="com.jaspersoft.studio.unit.height" value="pixel"/>
+				</reportElement>
+				<box>
+					<topPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+					<leftPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+					<bottomPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+					<rightPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+				</box>
+				<textElement textAlignment="Center">
+					<font size="10"/>
+				</textElement>
+				<text><![CDATA[Loan Officer]]></text>
+			</staticText>
+			<staticText>
+				<reportElement mode="Opaque" x="1350" y="0" width="110" height="49" forecolor="#FFFFFF" backcolor="#06688F" uuid="e314e913-9ee0-404a-bca0-99c97d4942ba">
+					<property name="com.jaspersoft.studio.unit.height" value="pixel"/>
+				</reportElement>
+				<box>
+					<topPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+					<leftPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+					<bottomPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+					<rightPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+				</box>
+				<textElement textAlignment="Center">
+					<font size="10"/>
+				</textElement>
+				<text><![CDATA[Branch Manager]]></text>
+			</staticText>
+			<staticText>
+				<reportElement mode="Opaque" x="958" y="0" width="92" height="49" forecolor="#FFFFFF" backcolor="#06688F" uuid="7f02ed3c-014a-48ff-b98a-7f930c1b4c78">
+					<property name="com.jaspersoft.studio.unit.height" value="pixel"/>
+				</reportElement>
+				<box>
+					<topPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+					<leftPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+					<bottomPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+					<rightPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+				</box>
+				<textElement textAlignment="Center">
+					<font size="10"/>
+				</textElement>
+				<text><![CDATA[Type of Security]]></text>
+			</staticText>
+		</band>
+	</columnHeader>
+	<detail>
+		<band height="25" splitType="Stretch">
+			<textField isStretchWithOverflow="true" pattern="#,##0.00#;(#,##0.00#)">
+				<reportElement stretchType="RelativeToTallestObject" x="285" y="1" width="65" height="24" uuid="270d37c6-9db2-4e81-addc-e757dab89946">
+					<property name="com.jaspersoft.studio.unit.x" value="pixel"/>
+					<property name="com.jaspersoft.studio.unit.width" value="pixel"/>
+				</reportElement>
+				<box padding="3">
+					<topPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+					<leftPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+					<bottomPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+					<rightPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+				</box>
+				<textElement textAlignment="Left"/>
+				<textFieldExpression><![CDATA[$F{Loan Product}]]></textFieldExpression>
+			</textField>
+			<textField isStretchWithOverflow="true" pattern="">
+				<reportElement stretchType="RelativeToTallestObject" x="488" y="1" width="52" height="24" uuid="170743f1-2501-4069-9a8e-ef7720688d3b">
+					<property name="com.jaspersoft.studio.unit.width" value="pixel"/>
+				</reportElement>
+				<box padding="3">
+					<topPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+					<leftPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+					<bottomPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+					<rightPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+				</box>
+				<textElement textAlignment="Left"/>
+				<textFieldExpression><![CDATA[$F{Loan Disbursement Date}]]></textFieldExpression>
+			</textField>
+			<textField isStretchWithOverflow="true" pattern="">
+				<reportElement stretchType="RelativeToTallestObject" x="185" y="1" width="100" height="24" uuid="3b336bcd-cbb3-4d49-9953-9d637bda301e">
+					<property name="com.jaspersoft.studio.unit.x" value="pixel"/>
+				</reportElement>
+				<box padding="3">
+					<topPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+					<leftPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+					<bottomPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+					<rightPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+				</box>
+				<textElement textAlignment="Center">
+					<font size="10"/>
+				</textElement>
+				<textFieldExpression><![CDATA[$F{Account Number}]]></textFieldExpression>
+			</textField>
+			<textField isStretchWithOverflow="true" pattern="#,##0.00#">
+				<reportElement stretchType="RelativeToTallestObject" x="419" y="1" width="69" height="24" uuid="a2c6fe2c-dc6c-4ed3-a563-a8026bd32441"/>
+				<box padding="3">
+					<topPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+					<leftPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+					<bottomPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+					<rightPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+				</box>
+				<textElement textAlignment="Right"/>
+				<textFieldExpression><![CDATA[$F{Loan Principal Balance(Without Interest)}]]></textFieldExpression>
+			</textField>
+			<textField isStretchWithOverflow="true">
+				<reportElement stretchType="RelativeToTallestObject" x="0" y="1" width="65" height="24" uuid="e36b521f-bc75-4a00-ab9c-4be9cdf898a4"/>
+				<box padding="3">
+					<topPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+					<leftPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+					<bottomPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+					<rightPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+				</box>
+				<textElement textAlignment="Left"/>
+				<textFieldExpression><![CDATA[$F{Client Number}]]></textFieldExpression>
+			</textField>
+			<textField isStretchWithOverflow="true">
+				<reportElement stretchType="RelativeToTallestObject" x="65" y="1" width="120" height="24" uuid="19381220-39b6-4162-b33e-a2597a75b493"/>
+				<box padding="3">
+					<topPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+					<leftPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+					<bottomPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+					<rightPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+				</box>
+				<textElement textAlignment="Left"/>
+				<textFieldExpression><![CDATA[$F{Client Name}]]></textFieldExpression>
+			</textField>
+			<textField isStretchWithOverflow="true" pattern="#,##0.00#">
+				<reportElement stretchType="RelativeToTallestObject" x="350" y="1" width="69" height="24" uuid="48f38617-339c-4b60-b0ca-5fcd5fc0a856"/>
+				<box padding="3">
+					<topPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+					<leftPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+					<bottomPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+					<rightPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+				</box>
+				<textElement textAlignment="Right"/>
+				<textFieldExpression><![CDATA[$F{Original Loan Amount}]]></textFieldExpression>
+			</textField>
+			<textField isStretchWithOverflow="true" pattern="">
+				<reportElement stretchType="RelativeToTallestObject" x="540" y="1" width="52" height="24" uuid="dc2ed120-729e-4e50-9d71-0391735ca29a">
+					<property name="com.jaspersoft.studio.unit.width" value="pixel"/>
+				</reportElement>
+				<box padding="3">
+					<topPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+					<leftPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+					<bottomPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+					<rightPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+				</box>
+				<textElement textAlignment="Left"/>
+				<textFieldExpression><![CDATA[$F{Loan Maturity/Expiry Date}]]></textFieldExpression>
+			</textField>
+			<textField isStretchWithOverflow="true" pattern="">
+				<reportElement stretchType="RelativeToTallestObject" x="592" y="1" width="58" height="24" uuid="a4a71782-2083-4b21-a5db-47c266664497">
+					<property name="com.jaspersoft.studio.unit.width" value="pixel"/>
+				</reportElement>
+				<box padding="3">
+					<topPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+					<leftPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+					<bottomPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+					<rightPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+				</box>
+				<textElement textAlignment="Center"/>
+				<textFieldExpression><![CDATA[$F{No. Of. Payments Agreed}]]></textFieldExpression>
+			</textField>
+			<textField isStretchWithOverflow="true" pattern="#,##0.00#">
+				<reportElement stretchType="RelativeToTallestObject" mode="Opaque" x="1200" y="1" width="49" height="24" forecolor="#000000" backcolor="#FFFFFF" uuid="c8b6c14a-38d0-4290-83e6-c90f2a53c3b8"/>
+				<box>
+					<topPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+					<leftPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+					<bottomPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+					<rightPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+				</box>
+				<textElement textAlignment="Right">
+					<font size="10"/>
+				</textElement>
+				<textFieldExpression><![CDATA[$F{Interest Rate (%) PA}]]></textFieldExpression>
+			</textField>
+			<textField isStretchWithOverflow="true">
+				<reportElement stretchType="RelativeToTallestObject" mode="Opaque" x="958" y="1" width="92" height="24" forecolor="#000000" backcolor="#FFFFFF" uuid="1e19f53a-a4fd-41fa-b7da-7b137f838b92"/>
+				<box>
+					<topPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+					<leftPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+					<bottomPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+					<rightPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+				</box>
+				<textElement textAlignment="Left">
+					<font size="10"/>
+				</textElement>
+				<textFieldExpression><![CDATA[$F{Type of Security}]]></textFieldExpression>
+			</textField>
+			<textField isStretchWithOverflow="true" pattern="#,##0.00#">
+				<reportElement stretchType="RelativeToTallestObject" mode="Opaque" x="788" y="1" width="80" height="24" forecolor="#000000" backcolor="#FFFFFF" uuid="af1dfcf9-15f5-4aeb-b9fd-33e80f10f561"/>
+				<box>
+					<topPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+					<leftPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+					<bottomPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+					<rightPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+				</box>
+				<textElement textAlignment="Right">
+					<font size="10"/>
+				</textElement>
+				<textFieldExpression><![CDATA[$F{Amount of Last Actual Principal Repayment}]]></textFieldExpression>
+			</textField>
+			<textField isStretchWithOverflow="true" pattern="#,##0.00#">
+				<reportElement stretchType="RelativeToTallestObject" mode="Opaque" x="1050" y="1" width="50" height="24" forecolor="#000000" backcolor="#FFFFFF" uuid="44fea34d-be94-4c21-b3a8-f98318566e64"/>
+				<box>
+					<topPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+					<leftPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+					<bottomPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+					<rightPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+				</box>
+				<textElement textAlignment="Right">
+					<font size="10"/>
+				</textElement>
+				<textFieldExpression><![CDATA[$F{Value of Security}]]></textFieldExpression>
+			</textField>
+			<textField isStretchWithOverflow="true">
+				<reportElement stretchType="RelativeToTallestObject" mode="Opaque" x="918" y="1" width="40" height="24" forecolor="#000000" backcolor="#FFFFFF" uuid="27a74201-dc52-4475-b11a-bab1eb6c3b80"/>
+				<box>
+					<topPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+					<leftPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+					<bottomPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+					<rightPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+				</box>
+				<textElement textAlignment="Center">
+					<font size="10"/>
+				</textElement>
+				<textFieldExpression><![CDATA[$F{Days in Arreas}]]></textFieldExpression>
+			</textField>
+			<textField isStretchWithOverflow="true">
+				<reportElement stretchType="RelativeToTallestObject" mode="Opaque" x="1150" y="1" width="50" height="24" forecolor="#000000" backcolor="#FFFFFF" uuid="27860afb-29fc-4e78-9a8d-1b4052dfa15e"/>
+				<box>
+					<topPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+					<leftPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+					<bottomPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+					<rightPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+				</box>
+				<textElement textAlignment="Left">
+					<font size="10"/>
+				</textElement>
+				<textFieldExpression><![CDATA[$F{Branch Number}]]></textFieldExpression>
+			</textField>
+			<textField isStretchWithOverflow="true">
+				<reportElement stretchType="RelativeToTallestObject" mode="Opaque" x="868" y="1" width="50" height="24" forecolor="#000000" backcolor="#FFFFFF" uuid="55031f16-eb40-45ed-8a3a-c2a770e5f574"/>
+				<box>
+					<topPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+					<leftPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+					<bottomPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+					<rightPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+				</box>
+				<textElement textAlignment="Center">
+					<font size="10"/>
+				</textElement>
+				<textFieldExpression><![CDATA[$F{Frequency}]]></textFieldExpression>
+			</textField>
+			<textField isStretchWithOverflow="true">
+				<reportElement stretchType="RelativeToTallestObject" mode="Opaque" x="1249" y="1" width="101" height="24" forecolor="#000000" backcolor="#FFFFFF" uuid="6f03535b-5dfd-4924-bc74-824ef5f50036"/>
+				<box>
+					<topPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+					<leftPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+					<bottomPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+					<rightPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+				</box>
+				<textElement textAlignment="Left">
+					<font size="10"/>
+				</textElement>
+				<textFieldExpression><![CDATA[$F{Loan Officer}]]></textFieldExpression>
+			</textField>
+			<textField isStretchWithOverflow="true">
+				<reportElement stretchType="RelativeToTallestObject" mode="Opaque" x="1350" y="1" width="110" height="24" forecolor="#000000" backcolor="#FFFFFF" uuid="a6cd548b-b533-4bce-9169-5c596ac24dcc"/>
+				<box>
+					<topPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+					<leftPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+					<bottomPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+					<rightPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+				</box>
+				<textElement textAlignment="Left">
+					<font size="10"/>
+				</textElement>
+				<textFieldExpression><![CDATA[$F{Branch Manager}]]></textFieldExpression>
+			</textField>
+			<textField isStretchWithOverflow="true">
+				<reportElement stretchType="RelativeToTallestObject" mode="Opaque" x="1100" y="1" width="50" height="24" forecolor="#000000" backcolor="#FFFFFF" uuid="29128e97-4955-4a90-803d-3de7e0ad3a78"/>
+				<box>
+					<topPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+					<leftPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+					<bottomPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+					<rightPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+				</box>
+				<textElement textAlignment="Center">
+					<font size="10"/>
+				</textElement>
+				<textFieldExpression><![CDATA[$F{Provisions}]]></textFieldExpression>
+			</textField>
+			<textField isStretchWithOverflow="true">
+				<reportElement stretchType="RelativeToTallestObject" x="710" y="1" width="78" height="24" uuid="d921edcf-3e35-4dd3-984f-22e98537ad76"/>
+				<box padding="3">
+					<topPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+					<leftPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+					<bottomPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+					<rightPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+				</box>
+				<textElement textAlignment="Left"/>
+				<textFieldExpression><![CDATA[$F{Date of Last Actual Principal Repayment}]]></textFieldExpression>
+			</textField>
+			<textField isStretchWithOverflow="true">
+				<reportElement stretchType="RelativeToTallestObject" x="650" y="1" width="60" height="24" uuid="51848aaf-7dab-4ba7-9bf9-bc35c473dcd8"/>
+				<box padding="3">
+					<topPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+					<leftPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+					<bottomPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+					<rightPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+				</box>
+				<textElement textAlignment="Left"/>
+				<textFieldExpression><![CDATA[$F{Agreed Date of First Principal}]]></textFieldExpression>
+			</textField>
+		</band>
+	</detail>
+	<columnFooter>
+		<band splitType="Stretch">
+			<property name="com.jaspersoft.studio.unit.height" value="pixel"/>
+		</band>
+	</columnFooter>
+	<pageFooter>
+		<band height="28" splitType="Stretch">
+			<textField pattern="EEEEE dd MMMMM yyyy">
+				<reportElement x="0" y="0" width="100" height="13" uuid="2fa8d636-e1a9-4f5b-b300-190bd809c23e"/>
+				<textFieldExpression><![CDATA[new java.util.Date()]]></textFieldExpression>
+			</textField>
+			<textField>
+				<reportElement mode="Opaque" x="0" y="0" width="1420" height="13" backcolor="#E6E6E6" uuid="d49d3470-7044-45b2-9b5c-f6d39658011c"/>
+				<textElement textAlignment="Right"/>
+				<textFieldExpression><![CDATA["Page "+$V{PAGE_NUMBER}+" of"]]></textFieldExpression>
+			</textField>
+			<textField evaluationTime="Report">
+				<reportElement mode="Opaque" x="1419" y="0" width="40" height="13" backcolor="#E6E6E6" uuid="b19c55b7-ca9b-42ef-be6f-d1e3972897bb"/>
+				<textFieldExpression><![CDATA[" " + $V{PAGE_NUMBER}]]></textFieldExpression>
+			</textField>
+			<textField pattern="EEEEE dd MMMMM yyyy">
+				<reportElement x="0" y="0" width="100" height="13" uuid="d2d7ced0-ebd2-42cb-943d-955d93143a7d"/>
+				<textFieldExpression><![CDATA[new java.util.Date()]]></textFieldExpression>
+			</textField>
+		</band>
+	</pageFooter>
+	<summary>
+		<band height="25" splitType="Stretch">
+			<property name="com.jaspersoft.studio.unit.height" value="pixel"/>
+		</band>
+	</summary>
+</jasperReport>

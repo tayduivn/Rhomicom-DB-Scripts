@@ -1,0 +1,44 @@
+/* Formatted on 10/6/2014 2:21:54 AM (QP5 v5.126.903.23003) */
+-- FUNCTION: APLAPPS.GET_DOC_CODES_AMNT(NUMBER, NUMBER, NUMBER)
+
+-- DROP FUNCTION APLAPPS.GET_DOC_CODES_AMNT(NUMBER, NUMBER, NUMBER);
+
+CREATE OR REPLACE FUNCTION APLAPPS.GET_DOC_CODES_AMNT (CODEID      NUMBER,
+                                                       UNITAMNT    NUMBER,
+                                                       QTY         NUMBER)
+   RETURN NUMBER
+AS
+   L_RESULT       NUMBER := 0.00;
+   CODESQL   CLOB := '';
+BEGIN
+   SELECT   SQL_FORMULAR
+     INTO   CODESQL
+     FROM   SCM.SCM_TAX_CODES
+    WHERE   CODE_ID = CODEID;
+
+   CODESQL :=
+      REPLACE (
+         CODESQL,
+         '{:qty}',
+         TRIM (TO_CHAR (QTY, '9999999999999999999999999')) || ' FROM DUAL'
+      );
+   CODESQL :=
+      REPLACE (
+         CODESQL,
+         '{:unit_price}',
+         TRIM (TO_CHAR (UNITAMNT, '9999999999999999999999999'))
+         || ' FROM DUAL'
+      );
+
+   IF CODESQL IS NOT NULL
+   THEN
+      EXECUTE IMMEDIATE CODESQL INTO   L_RESULT;
+   END IF;
+
+   RETURN NVL (L_RESULT, 0);
+EXCEPTION
+   WHEN OTHERS
+   THEN
+      RETURN 0.00;
+END;
+/
