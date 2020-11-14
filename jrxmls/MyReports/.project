@@ -33,4 +33,15 @@
 			<location>C:/Users/richa/Downloads/268.jrxml</location>
 		</link>
 	</linkedResources>
+	<filteredResources>
+		<filter>
+			<id>1605178877557</id>
+			<name></name>
+			<type>30</type>
+			<matcher>
+				<id>org.eclipse.core.resources.regexFilterMatcher</id>
+				<arguments>node_modules|.git|__CREATED_BY_JAVA_LANGUAGE_SERVER__</arguments>
+			</matcher>
+		</filter>
+	</filteredResources>
 </projectDescription>

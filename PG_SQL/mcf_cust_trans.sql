@@ -130,9 +130,11 @@ BEGIN
     cust_id,
     'cntct_no_mobl') tel_number, 
 					CASE WHEN p_branch_id = -1 THEN 'All Branches' ELSE org.get_site_code_desc(p_branch_id) END branch,
-          a.account_id
+          a.account_id,a.account_status, a.account_status_reason, a.is_dormant 
 FROM mcf.mcf_accounts a 
 WHERE 1 = 1
+AND a.is_dormant !='Yes'
+AND a.account_status = 'Active'
 AND a.account_type in ('Savings','Susu','Current','Investment')
 AND a.account_number NOT LIKE '777%'
 AND a.branch_id = COALESCE(NULLIF(p_branch_id,-1),a.branch_id)) tbl1
@@ -266,3 +268,8 @@ EXCEPTION
             RETURN v_msgs;
 END;
 $BODY$;
+
+ALTER TABLE alrt.bulk_msgs_sent
+    ALTER COLUMN err_msg TYPE text COLLATE pg_catalog."default";
+ALTER TABLE alrt.alrt_msgs_sent
+    ALTER COLUMN err_msg TYPE text COLLATE pg_catalog."default";
