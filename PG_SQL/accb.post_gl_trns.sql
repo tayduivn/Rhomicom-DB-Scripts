@@ -1,3 +1,23 @@
+
+CREATE OR REPLACE FUNCTION public.rho_reset_sequence (p_seq_name TEXT, p_key_column TEXT, p_table_name TEXT)
+	RETURNS TEXT
+	LANGUAGE 'plpgsql'
+	COST 100 VOLATILE
+	AS $BODY$
+	<< outerblock >>
+DECLARE
+	v_max_id bigint := - 1;
+	v_SQL TEXT:= ''; 
+BEGIN	
+--v_SQL :='SELECT MAX('||p_key_column||') FROM '||p_table_name;
+--EXECUTE v_SQL INTO v_max_id;
+--v_SQL :='SELECT nextval('''||p_seq_name||''')';
+v_SQL :='SELECT setval('''||p_seq_name||''', COALESCE((SELECT MAX('||p_key_column||')+1 FROM '||p_table_name||'), 1), false)';
+EXECUTE v_SQL;
+RETURN 'SUCCESS:';
+END;
+$BODY$;
+
 CREATE OR REPLACE FUNCTION org.get_accnt_id_brnch_eqv (p_brnch_id bigint, dfltacntid bigint)
 	RETURNS integer
 	LANGUAGE 'plpgsql'
@@ -1280,6 +1300,420 @@ EXCEPTION
 		msgs := msgs || chr(10) || '' || SQLSTATE || chr(10) || SQLERRM;
 	IF msgid > 0 THEN
 		updtMsg := rpt.updateRptLogMsg1 (msgid, msgs, $3, $2);
+		--msgs := rpt.getLogMsg(msgid);
+	ELSE
+		msgs := REPLACE(msgs, chr(10), '<br/>');
+	END IF;
+	RETURN msgs;
+END;
+
+$BODY$;
+
+CREATE OR REPLACE FUNCTION accb.post_gl_trns_inc_mnl (gl_btchid bigint, p_include_mnl character varying, who_rn bigint, run_date character varying, orgidno integer, p_msgid bigint, p_is_bulk_run character varying)
+	RETURNS character varying
+	LANGUAGE 'plpgsql'
+	COST 100 VOLATILE
+	AS $BODY$
+	<< outerblock >>
+DECLARE
+	msgid bigint := - 1;
+	rd_gl_btchID bigint := - 1;
+	btchSrc character varying(200);
+	rd2 RECORD;
+	rd1 RECORD;
+	rd0 RECORD;
+	msgs text := chr(10) || '';
+	orgNetIcmAccntID integer := - 1;
+	orgRetErnAccntID integer := - 1;
+	cur_ID bigint := - 1;
+	cntr integer := 0;
+	errCntr integer := 0;
+	batchCntr integer := 0;
+	updtMsg bigint := 0;
+	v_reslt_1 character varying(200) := '';
+	dateStr character varying(21) := '';
+	asAtDate character varying(21) := '';
+	accntCurrID integer := - 1;
+	funCurID integer := - 1;
+	accntCurrAmnt numeric := 0;
+	acctyp character varying(200) := '';
+	hsBnUpdt boolean := FALSE;
+	dbt1 numeric := 0;
+	crdt1 numeric := 0;
+	net1 numeric := 0;
+	cntrlAcntID integer := - 1;
+	cntrlAcntCurrID integer := - 1;
+	aesum numeric := 0;
+	crlsum numeric := 0;
+BEGIN
+	errCntr := 0;
+	batchCntr := 0;
+	dateStr := to_char(now(), 'YYYY-MM-DD HH24:MI:SS');
+	cur_ID := COALESCE(org.get_Orgfunc_Crncy_id (orgidno), - 1);
+	orgRetErnAccntID := accb.get_OrgRetErnAccntID (orgidno);
+	orgNetIcmAccntID := accb.get_orgnetincmaccntid (orgidno);
+	btchSrc := accb.get_batch_source (gl_btchID);
+	msgid := p_msgid;
+	IF msgid <= 0 THEN
+		msgid := rpt.getRptLogMsgID (gl_btchID, 'Posting Batch of Transactions');
+		IF msgid <= 0 THEN
+			v_reslt_1 := rpt.createRptLogMsg (dateStr || ' .... Posting Batch of Transactions is about to Start...', 'Posting Batch of Transactions', gl_btchID, dateStr, who_rn);
+			msgid := rpt.getRptLogMsgID (gl_btchID, 'Posting Batch of Transactions');
+		END IF;
+	END IF;
+	IF (accb.isThereANActvPrcss ('5') = '1') THEN
+		msgs := msgs || chr(10) || 'Sorry an Account Posting Process is already on-going!\r\nKindly Wait for that Process to Finish and try again!';
+		IF msgid > 0 THEN
+			updtMsg := rpt.updateRptLogMsg1 (msgid, msgs, run_date, who_rn);
+			--msgs := rpt.getLogMsg(msgid);
+		ELSE
+			msgs := REPLACE(msgs, chr(10), '<br/>');
+		END IF;
+		RAISE EXCEPTION 'ERROR:%', msgs
+			USING HINT = 'ERROR:' || msgs;
+	ELSE
+		v_reslt_1 := accb.updateANActvPrcss ('5', '1');
+	END IF;
+	IF coalesce(orgNetIcmAccntID, - 1) <= 0 OR coalesce(orgRetErnAccntID, - 1) <= 0 THEN
+		msgs := msgs || chr(10) || 'Net Income and Retained Earnings Accounts Must be Created First!';
+		IF msgid > 0 THEN
+			updtMsg := rpt.updateRptLogMsg1 (msgid, msgs, run_date, who_rn);
+			--msgs := rpt.getLogMsg(msgid);
+		ELSE
+			msgs := REPLACE(msgs, chr(10), '<br/>');
+		END IF;
+		v_reslt_1 := accb.updateANActvPrcss ('5', '0');
+		RAISE EXCEPTION 'ERROR:%', msgs
+			USING HINT = 'ERROR:' || msgs;
+	END IF;
+	IF gl_btchID <= 0 AND p_is_bulk_run != '1' THEN
+		msgs := msgs || chr(10) || 'Please select a saved Batch First!';
+		IF msgid > 0 THEN
+			updtMsg := rpt.updateRptLogMsg1 (msgid, msgs, run_date, who_rn);
+			--msgs := rpt.getLogMsg(msgid);
+		ELSE
+			msgs := REPLACE(msgs, chr(10), '<br/>');
+		END IF;
+		v_reslt_1 := accb.updateANActvPrcss ('5', '0');
+		RAISE EXCEPTION 'ERROR:%', msgs
+			USING HINT = 'ERROR:' || msgs;
+	ELSE
+		FOR rd0 IN
+		SELECT
+			batch_id,
+			batch_name,
+			batch_source,
+			batch_status,
+			CASE WHEN batch_status = '1' THEN
+				'POSTED'
+			ELSE
+				'NOT POSTED'
+			END pstng_status,
+			batch_description,
+			org_id,
+			avlbl_for_postng,
+			(
+				SELECT
+					count(1)
+				FROM
+					accb.accb_trnsctn_details y
+				WHERE
+					y.batch_id = a.batch_id) no_of_trns,
+			(
+				SELECT
+					max(y.trnsctn_date)
+				FROM
+					accb.accb_trnsctn_details y
+				WHERE
+					y.batch_id = a.batch_id) lastBatchTrnsDate
+		FROM
+			accb.accb_trnsctn_batches a
+		WHERE
+			org_id = orgidno
+			AND batch_status = '0'
+			AND (avlbl_for_postng = '1'
+				OR batch_id = gl_btchID
+				OR UPPER(p_include_mnl) = 'YES')
+			AND ((
+					SELECT
+						count(1)
+					FROM
+						accb.accb_trnsctn_details y
+					WHERE
+						y.batch_id = a.batch_id) > 0
+					OR batch_source = 'Period Close Process')
+			AND ((age(now(), to_timestamp(last_update_date, 'YYYY-MM-DD HH24:MI:SS')) >= interval '0 second'
+					AND gl_btchID <= 0)
+				OR (batch_id = gl_btchID))
+		ORDER BY
+			1 ASC
+		LIMIT 500 OFFSET 0 LOOP
+			btchSrc := rd0.batch_source;
+			rd_gl_btchID := rd0.batch_id;
+			v_reslt_1 := accb.updateANActvPrcss ('5', '1');
+			UPDATE
+				accb.accb_trnsctn_details
+			SET
+				dbt_amount = round(dbt_amount, 2),
+				crdt_amount = round(crdt_amount, 2),
+				net_amount = round((
+					CASE WHEN accb.get_accnt_type (accnt_id) IN ('A', 'EX') THEN
+					(dbt_amount - crdt_amount)
+				ELSE
+					(crdt_amount - dbt_amount)
+					END), 2)
+			WHERE
+				batch_id = rd_gl_btchID;
+			IF accb.gl_batch_trns_sum (rd_gl_btchID, 'Debit') != accb.gl_batch_trns_sum (rd_gl_btchID, 'Credit') THEN
+				msgs := msgs || chr(10) || 'Cannot Post an Unbalanced Batch of Transactions!';
+				IF msgid > 0 THEN
+					updtMsg := rpt.updateRptLogMsg1 (msgid, msgs, run_date, who_rn);
+					--msgs := rpt.getLogMsg(msgid);
+				END IF;
+				IF msgid <= 0 THEN
+					msgs := REPLACE(msgs, chr(10), '<br/>');
+				END IF;
+				v_reslt_1 := accb.updateANActvPrcss ('5', '0');
+				RAISE EXCEPTION 'ERROR:%', msgs
+					USING HINT = 'ERROR:' || msgs;
+			END IF;
+			cntr := 0;
+			FOR rd1 IN
+			SELECT
+				substring(a.trnsctn_date FROM 1 FOR 10) trnsctndate,
+				round(SUM(a.dbt_amount), 4) dbtamount,
+				round(SUM(a.crdt_amount), 4) crdtamount
+			FROM
+				accb.accb_trnsctn_details a
+			WHERE (a.batch_id = rd_gl_btchID)
+		GROUP BY
+			substring(a.trnsctn_date FROM 1 FOR 10)
+		HAVING
+			round(SUM(a.dbt_amount), 2) != round(SUM(a.crdt_amount), 2)
+		ORDER BY
+			1 LOOP
+				IF cntr = 0 THEN
+					msgs := msgs || chr(10) || 'Your transactions will cause your Balance Sheet to become Unbalanced on some Days!
+                                                            Please make sure each day has equal debits and credits.
+                                                            Check the ff Days:';
+				END IF;
+				msgs := msgs || chr(10) || rd1.trnsctndate || '     DR=' || rd1.dbtamount || '     CR=' || rd1.crdt_amount;
+				cntr := cntr + 1;
+			END LOOP;
+			IF cntr > 0 THEN
+				IF msgid > 0 THEN
+					updtMsg := rpt.updateRptLogMsg1 (msgid, msgs, run_date, who_rn);
+					--msgs := rpt.getLogMsg(msgid);
+				ELSE
+					msgs := REPLACE(msgs, chr(10), '<br/>');
+				END IF;
+				v_reslt_1 := accb.updateANActvPrcss ('5', '0');
+				RAISE EXCEPTION 'ERROR:%', msgs
+					USING HINT = 'ERROR:' || msgs;
+			END IF;
+			cntr := 0;
+			FOR rd2 IN
+			SELECT
+				a.transctn_id,
+				b.accnt_num,
+				b.accnt_name,
+				a.transaction_desc,
+				a.dbt_amount,
+				a.crdt_amount,
+				to_char(to_timestamp(a.trnsctn_date, 'YYYY-MM-DD HH24:MI:SS'), 'DD-Mon-YYYY HH24:MI:SS') lnDte,
+				a.func_cur_id,
+				a.batch_id,
+				a.accnt_id,
+				a.net_amount,
+				a.trns_status,
+				a.entered_amnt,
+				gst.get_pssbl_val (a.entered_amt_crncy_id),
+				a.entered_amt_crncy_id,
+				a.accnt_crncy_amnt,
+				gst.get_pssbl_val (a.accnt_crncy_id),
+				a.accnt_crncy_id,
+				a.func_cur_exchng_rate,
+				a.accnt_cur_exchng_rate,
+				a.src_trns_id_reconciled,
+				b.is_prnt_accnt,
+				b.has_sub_ledgers
+			FROM
+				accb.accb_trnsctn_details a
+			LEFT OUTER JOIN accb.accb_chart_of_accnts b ON a.accnt_id = b.accnt_id
+	WHERE (a.batch_id = rd_gl_btchID
+		AND a.trns_status = '0')
+ORDER BY
+	a.transctn_id LOOP
+		IF rd2.is_prnt_accnt = '1' OR rd2.has_sub_ledgers = '1' THEN
+			msgs := msgs || chr(10) || 'Operation Cancelled because one cannot post directly into a parent or control account as present in the FF lines!' || chr(10) || 'ACCOUNT: ' || rd2.accnt_num || '.' || rd2.accnt_name || chr(10) || 'AMOUNT: ' || rd2.net_amount || chr(10) || 'DATE: ' || rd2.lnDte;
+			IF msgid > 0 THEN
+				updtMsg := rpt.updateRptLogMsg1 (msgid, msgs, run_date, who_rn);
+				--msgs := rpt.getLogMsg(msgid);
+			ELSE
+				msgs := REPLACE(msgs, chr(10), '<br/>');
+			END IF;
+			v_reslt_1 := accb.updateANActvPrcss ('5', '0');
+			RAISE EXCEPTION 'ERROR:%', msgs
+				USING HINT = 'ERROR:' || msgs;
+		END IF;
+		IF rd2.accnt_num IS NULL OR rd2.accnt_name IS NULL THEN
+			msgs := msgs || chr(10) || 'Operation Cancelled because selected Account does not exist in this Organisation as present in the FF lines!' || chr(10) || 'ACCOUNT: ID-' || rd2.accnt_id || '-' || COALESCE(rd2.accnt_num, 'UNKNOWN') || '.' || COALESCE(rd2.accnt_name, 'UNKNOWN') || chr(10) || 'AMOUNT: ' || rd2.net_amount || chr(10) || 'DATE: ' || rd2.lnDte;
+			IF msgid > 0 THEN
+				updtMsg := rpt.updateRptLogMsg1 (msgid, msgs, run_date, who_rn);
+				--msgs := rpt.getLogMsg(msgid);
+			ELSE
+				msgs := REPLACE(msgs, chr(10), '<br/>');
+			END IF;
+			v_reslt_1 := accb.updateANActvPrcss ('5', '0');
+			RAISE EXCEPTION 'ERROR:%', msgs
+				USING HINT = 'ERROR:' || msgs;
+		END IF;
+		IF btchSrc != 'Period Close Process' THEN
+			--Check if Transaction is permitted per Period Date and Budgetary Controls
+			v_reslt_1 := accb.isTransPrmttd (orgidno, rd2.accnt_id, rd2.lnDte, rd2.net_amount);
+			IF v_reslt_1 NOT LIKE 'SUCCESS:%' THEN
+				msgs := msgs || chr(10) || 'Operation Cancelled because the line with the ff details was detected as an INVALID Transaction!' || chr(10) || 'ACCOUNT: ' || rd2.accnt_num || '.' || rd2.accnt_name || chr(10) || 'AMOUNT: ' || rd2.net_amount || chr(10) || 'DATE: ' || rd2.lnDte || chr(10) || v_reslt_1;
+				IF msgid > 0 THEN
+					updtMsg := rpt.updateRptLogMsg1 (msgid, msgs, run_date, who_rn);
+					--msgs := rpt.getLogMsg(msgid);
+				ELSE
+					msgs := REPLACE(msgs, chr(10), '<br/>');
+				END IF;
+				v_reslt_1 := accb.updateANActvPrcss ('5', '0');
+				RAISE EXCEPTION 'ERROR:%', msgs
+					USING HINT = 'ERROR:' || msgs;
+			END IF;
+		END IF;
+		accntCurrID := rd2.accnt_crncy_id;
+		funCurID := rd2.func_cur_id;
+		accntCurrAmnt := rd2.accnt_crncy_amnt;
+		acctyp := accb.get_accnt_type (rd2.accnt_id);
+		hsBnUpdt := accb.hsTrnsUptdAcntBls (rd2.transctn_id, rd2.lnDte, rd2.accnt_id);
+		IF hsBnUpdt = FALSE THEN
+			dbt1 := rd2.dbt_amount;
+			crdt1 := rd2.crdt_amount;
+			net1 := rd2.net_amount;
+			IF (funCurID != accntCurrID) THEN
+				v_reslt_1 := accb.postAccntCurrTransaction (rd2.accnt_id, public.getSign (dbt1) * accntCurrAmnt, public.getSign (crdt1) * accntCurrAmnt, public.getSign (net1) * accntCurrAmnt, rd2.lnDte, rd2.transctn_id, accntCurrID, who_rn);
+				IF v_reslt_1 LIKE 'ERROR:%' THEN
+					errCntr := errCntr + 1;
+					msgs := msgs || chr(10) || v_reslt_1;
+				END IF;
+			END IF;
+			v_reslt_1 := accb.postTransaction (rd2.accnt_id, dbt1, crdt1, net1, rd2.lnDte, rd2.transctn_id, who_rn);
+			IF v_reslt_1 LIKE 'ERROR:%' THEN
+				errCntr := errCntr + 1;
+				msgs := msgs || chr(10) || v_reslt_1;
+			END IF;
+		END IF;
+		hsBnUpdt := accb.hsTrnsUptdAcntBls (rd2.transctn_id, rd2.lnDte, orgNetIcmAccntID);
+		IF (hsBnUpdt = FALSE) THEN
+			IF (acctyp = 'R') THEN
+				v_reslt_1 := accb.postTransaction (orgNetIcmAccntID, rd2.dbt_amount, rd2.crdt_amount, rd2.net_amount, rd2.lnDte, rd2.transctn_id, who_rn);
+				IF v_reslt_1 LIKE 'ERROR:%' THEN
+					errCntr := errCntr + 1;
+					msgs := msgs || chr(10) || v_reslt_1;
+				END IF;
+			ELSIF (acctyp = 'EX') THEN
+				v_reslt_1 := accb.postTransaction (orgNetIcmAccntID, rd2.dbt_amount, rd2.crdt_amount, (- 1) * rd2.net_amount, rd2.lnDte, rd2.transctn_id, who_rn);
+				IF v_reslt_1 LIKE 'ERROR:%' THEN
+					errCntr := errCntr + 1;
+					msgs := msgs || chr(10) || v_reslt_1;
+				END IF;
+			END IF;
+		END IF;
+		cntrlAcntID := gst.getGnrlRecNm ('accb.accb_chart_of_accnts', 'accnt_id', 'control_account_id', rd2.accnt_id)::integer;
+		IF (cntrlAcntID > 0) THEN
+			hsBnUpdt := accb.hsTrnsUptdAcntBls (rd2.transctn_id, rd2.lnDte, cntrlAcntID);
+			IF (hsBnUpdt = FALSE) THEN
+				cntrlAcntCurrID := gst.getGnrlRecNm ('accb.accb_chart_of_accnts', 'accnt_id', 'crncy_id', cntrlAcntID)::integer;
+				dbt1 := rd2.dbt_amount;
+				crdt1 := rd2.crdt_amount;
+				net1 := rd2.net_amount;
+				IF (funCurID != cntrlAcntCurrID AND cntrlAcntCurrID = accntCurrID) THEN
+					v_reslt_1 := accb.postAccntCurrTransaction (cntrlAcntID, public.getSign (dbt1) * accntCurrAmnt, public.getSign (crdt1) * accntCurrAmnt, public.getSign (net1) * accntCurrAmnt, rd2.lnDte, rd2.transctn_id, accntCurrID, who_rn);
+					IF v_reslt_1 LIKE 'ERROR:%' THEN
+						errCntr := errCntr + 1;
+						msgs := msgs || chr(10) || v_reslt_1;
+					END IF;
+				END IF;
+				v_reslt_1 := accb.postTransaction (cntrlAcntID, rd2.dbt_amount, rd2.crdt_amount, rd2.net_amount, rd2.lnDte, rd2.transctn_id, who_rn);
+				IF v_reslt_1 LIKE 'ERROR:%' THEN
+					errCntr := errCntr + 1;
+					msgs := msgs || chr(10) || v_reslt_1;
+				END IF;
+			END IF;
+		END IF;
+		v_reslt_1 := accb.chngeTrnsStatus (rd2.transctn_id, '1', who_rn);
+		v_reslt_1 := accb.changeReconciledStatus (rd2.src_trns_id_reconciled, '1');
+		IF msgid > 0 THEN
+			msgs := msgs || chr(10) || 'Successfully posted transaction ID= ' || rd2.transctn_id;
+			updtMsg := rpt.updateRptLogMsg1 (msgid, msgs, run_date, who_rn);
+			--msgs := rpt.getLogMsg(msgid);
+		END IF;
+		cntr := cntr + 1;
+	END LOOP;
+			v_reslt_1 := accb.updateBatchStatus (rd_gl_btchID, '1', '0', who_rn);
+			batchCntr := batchCntr + 1;
+			msgs := msgs || chr(10) || 'Successfully Posted a Total of ' || cntr || ' Transaction(s) In the Journal Batch (' || rd0.batch_name || ')!';
+		END LOOP;
+	END IF;
+	IF gl_btchID > 0 THEN
+		v_reslt_1 := accb.reloadAcntChrtBals (gl_btchID, orgNetIcmAccntID, who_rn);
+		IF v_reslt_1 LIKE 'ERROR:%' THEN
+			errCntr := errCntr + 1;
+			msgs := msgs || chr(10) || v_reslt_1;
+		END IF;
+	ELSE
+		v_reslt_1 := accb.reloadAcntChrtBals1 (orgNetIcmAccntID, orgidno, who_rn);
+		IF v_reslt_1 LIKE 'ERROR:%' THEN
+			errCntr := errCntr + 1;
+			msgs := msgs || chr(10) || v_reslt_1;
+		END IF;
+	END IF;
+	msgs := msgs || chr(10) || v_reslt_1 || 'Reloading Chart of Account Balances!';
+	IF msgid > 0 THEN
+		updtMsg := rpt.updateRptLogMsg1 (msgid, msgs, run_date, who_rn);
+		--msgs := rpt.getLogMsg(msgid);
+	END IF;
+	aesum := accb.get_COA_AESum (orgidno);
+	crlsum := accb.get_COA_CRLSum (orgidno);
+	IF (aesum != crlsum) THEN
+		msgs := msgs || chr(10) || 'Batch of Transactions caused an IMBALANCE in the Accounting! A+E=' || aesum || chr(10) || ' C+R+L=' || crlsum || chr(10) || 'Diff=' || (aesum - crlsum);
+		asAtDate := accb.getMinUnpstdTrnsDte (orgidno);
+		IF (asAtDate != '') THEN
+			v_reslt_1 := accb.correctImblnsProcess (asAtDate, orgidno, who_rn);
+			IF v_reslt_1 LIKE 'ERROR:%' THEN
+				errCntr := errCntr + 1;
+				msgs := msgs || chr(10) || v_reslt_1;
+			END IF;
+		END IF;
+	ELSE
+		msgs := msgs || chr(10) || 'Batch of Transactions POSTED SUCCESSFULLY!=' || (aesum - crlsum);
+	END IF;
+	IF msgid > 0 THEN
+		updtMsg := rpt.updateRptLogMsg1 (msgid, msgs, run_date, who_rn);
+		--msgs := rpt.getLogMsg(msgid);
+	ELSE
+		msgs := REPLACE(msgs, chr(10), '<br/>');
+	END IF;
+	IF errCntr <= 0 AND batchCntr > 0 THEN
+		msgs := 'Posting Completed Successfully!' || chr(10) || 'You can Review Logs for any details there may be. Thanks!';
+	ELSIF errCntr <= 0 THEN
+		msgs := msgs || chr(10) || 'TOTAL ERRORS:' || errCntr || ' in TOTAL BATCHES PROCESSED:' || batchCntr;
+	ELSE
+		msgs := msgs || chr(10) || 'TOTAL ERRORS:' || errCntr || ' in TOTAL BATCHES PROCESSED:' || batchCntr;
+		RAISE EXCEPTION 'ERROR:%', msgs
+			USING HINT = 'ERROR:' || msgs;
+	END IF;
+	--dbt1 := 1 / 0;
+	RETURN REPLACE(msgs, chr(10), '<br/>');
+EXCEPTION
+	WHEN OTHERS THEN
+		--ROLLBACK;
+		msgs := msgs || chr(10) || '' || SQLSTATE || chr(10) || SQLERRM;
+	IF msgid > 0 THEN
+		updtMsg := rpt.updateRptLogMsg1 (msgid, msgs, run_date, who_rn);
 		--msgs := rpt.getLogMsg(msgid);
 	ELSE
 		msgs := REPLACE(msgs, chr(10), '<br/>');

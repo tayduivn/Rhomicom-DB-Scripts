@@ -25,5 +25,8 @@ if (fsockopen($host, $port)) {
     print "<br/>I CANNOT reach port $port on $host";
 }
 echo "</div>";
+?>
+<pre><?php var_export($_SERVER)?></pre>
+<?php
 echo phpinfo();
 ?>
