@@ -1,3 +1,28 @@
+CREATE OR REPLACE FUNCTION accb.get_bdgt_amount(
+	p_bdgtid bigint,
+	p_accntid integer,
+	p_strtdte character varying,
+	p_enddte character varying)
+    RETURNS numeric
+    LANGUAGE 'plpgsql'
+    COST 100
+    VOLATILE PARALLEL UNSAFE
+AS $BODY$
+<< outerblock >>
+DECLARE
+  v_res NUMERIC := 0;
+BEGIN
+  SELECT SUM(b.limit_amount) INTO v_res
+  FROM accb.accb_budget_details b
+  WHERE ((b.budget_id = p_bdgtid AND b.accnt_id=p_accntid) 
+            AND b.start_date <= p_enddte
+            and b.end_date >= p_strtdte);
+  RETURN COALESCE(v_res, 0.00);
+EXCEPTION
+  WHEN OTHERS THEN
+      RETURN COALESCE(v_res, 0.00);
+END;
+$BODY$;
 
 CREATE OR REPLACE FUNCTION mcf.get_ttl_wdwl_amount(
 	v_dte_year integer,
