@@ -1,3 +1,108 @@
+CREATE OR REPLACE FUNCTION accb.istransprmttd(
+	p_org_id integer,
+	p_accntid integer,
+	p_trnsdate character varying,
+	p_amnt numeric)
+    RETURNS character varying
+    LANGUAGE 'plpgsql'
+    COST 100
+    VOLATILE PARALLEL UNSAFE
+AS $BODY$
+<< outerblock >>
+DECLARE
+	v_res character varying(1) := '0';
+	v_cnt bigint :=0;
+	trnsDte timestamp;
+	dte1 timestamp;
+	dte1Or timestamp;
+	dte2 timestamp;
+	prdHdrID bigint := - 1;
+	noTrnsDatesLov character varying(200) := '';
+	noTrnsDayLov character varying(200) := '';
+	actvBdgtID bigint := - 1;
+	amntLmt numeric := 0;
+	bdte1 timestamp;
+	bdte2 timestamp;
+	crntBals numeric := 0;
+	actn character varying(200) := '';
+BEGIN
+	IF coalesce(p_accntID, - 1) <= 0 THEN
+		RETURN 'ERROR:Account Number cannot be empty!';
+	END IF;
+	IF p_trnsdate = '' THEN
+		RETURN 'ERROR:Transaction Date cannot be empty!';
+	END IF;
+
+	SELECT COUNT(accnt_id) 
+		INTO v_cnt
+	FROM accb.accb_chart_of_accnts
+	WHERE accnt_id= p_accntID AND org_id=p_org_id;
+
+	IF coalesce(v_cnt, - 1) <= 0 THEN
+		RETURN 'ERROR:Account Number must exist in the Current Organization!';
+	END IF;
+	trnsDte := to_timestamp(p_trnsdate, 'DD-Mon-YYYY HH24:MI:SS');
+	dte1 := to_timestamp(accb.getLtstPrdStrtDate (), 'DD-Mon-YYYY HH24:MI:SS');
+	dte1Or := to_timestamp(accb.getLastPrdClseDate (p_org_id), 'DD-Mon-YYYY HH24:MI:SS');
+	dte2 := to_timestamp(accb.getLtstPrdEndDate (), 'DD-Mon-YYYY HH24:MI:SS');
+
+	/*IF (trnsDte <= dte1Or)
+	 THEN
+	 RETURN 'ERROR:Transaction Date cannot be On or Before ' || to_char(dte1Or, 'DD-Mon-YYYY HH24:MI:SS');
+	 END IF;
+	 IF (trnsDte < dte1)
+	 THEN
+	 RETURN 'ERROR:Transaction Date cannot be before ' || to_char(dte1, 'DD-Mon-YYYY HH24:MI:SS');
+	 END IF;
+	 IF (trnsDte > dte2)
+	 THEN
+	 RETURN 'ERROR:Transaction Date cannot be after ' || to_char(dte2, 'DD-Mon-YYYY HH24:MI:SS');
+	 END IF;*/
+	--Check if trnsDate exists in an Open Period
+	prdHdrID := accb.getPrdHdrID (p_org_id);
+	IF (prdHdrID > 0) THEN
+		IF (accb.getTrnsDteOpenPrdLnID (prdHdrID, to_char(trnsDte, 'YYYY-MM-DD HH24:MI:SS')) < 0) THEN
+			RETURN 'ERROR:Cannot use a Transaction Date (' || to_char(trnsDte, 'DD-Mon-YYYY HH24:MI:SS') || ') which does not exist in any OPEN period!';
+		END IF;
+		--Check if Date is not in Disallowed Dates
+		noTrnsDatesLov := gst.getGnrlRecNm ('accb.accb_periods_hdr', 'periods_hdr_id', 'no_trns_dates_lov_nm', prdHdrID);
+		noTrnsDayLov := gst.getGnrlRecNm ('accb.accb_periods_hdr', 'periods_hdr_id', 'no_trns_wk_days_lov_nm', prdHdrID);
+		IF (noTrnsDatesLov != '') THEN
+			IF (gst.getEnbldPssblValID (UPPER(to_char(trnsDte, 'DD-Mon-YYYY')), gst.getEnbldLovID (noTrnsDatesLov)) > 0) THEN
+				RETURN 'ERROR:Transactions on this Date (' || to_char(trnsDte, 'DD-Mon-YYYY HH24:MI:SS') || ') have been banned on this system!';
+			END IF;
+		END IF;
+		--Check if Day of Week is not in Disaalowed days
+		IF (noTrnsDatesLov != '') THEN
+			IF (gst.getEnbldPssblValID (upper(to_char(trnsDte, 'DAY')), gst.getEnbldLovID (noTrnsDayLov)) > 0) THEN
+				RETURN 'ERROR:Transactions on this Day of Week (' || to_char(trnsDte, 'DAY') || ') have been banned on this system!';
+			END IF;
+		END IF;
+	END IF;
+	--//Amount must not disobey budget settings on that account
+	actvBdgtID := accb.getActiveBdgtID (p_org_id);
+	amntLmt := accb.getAcntsBdgtdAmnt1 (actvBdgtID, p_accntID, to_char(trnsDte, 'DD-Mon-YYYY HH24:MI:SS'));
+	bdte1 := to_timestamp(accb.getAcntsBdgtStrtDte (actvBdgtID, p_accntID, to_char(trnsDte, 'DD-Mon-YYYY HH24:MI:SS')), 'DD-Mon-YYYY HH24:MI:SS');
+	bdte2 := to_timestamp(accb.getAcntsBdgtEndDte (actvBdgtID, p_accntID, to_char(trnsDte, 'DD-Mon-YYYY HH24:MI:SS')), 'DD-Mon-YYYY HH24:MI:SS');
+	crntBals := accb.getTrnsSum (p_accntID, to_char(bdte1, 'DD-Mon-YYYY HH24:MI:SS'), to_char(bdte2, 'DD-Mon-YYYY HH24:MI:SS'), '1');
+	actn := accb.getAcntsBdgtLmtActn (actvBdgtID, p_accntID, to_char(trnsDte, 'DD-Mon-YYYY HH24:MI:SS'));
+	IF ((p_amnt + crntBals) > amntLmt) THEN
+		IF (actn = 'Disallow') THEN
+			RETURN 'ERROR:This transaction will cause budget on \r\nthe chosen account to be exceeded! ';
+		ELSIF (actn = 'Warn') THEN
+			RETURN 'SUCCESS:This is just to WARN you that the budget on \r\nthe chosen account will be exceeded!';
+		ELSIF (actn = 'Congratulate') THEN
+			RETURN 'SUCCESS:This is just to CONGRATULATE you for exceeding the targetted Amount!';
+		ELSE
+			RETURN 'SUCCESS:';
+		END IF;
+	END IF;
+	RETURN 'SUCCESS:';
+EXCEPTION
+	WHEN OTHERS THEN
+		RETURN 'ERROR:' || SQLERRM;
+END;
+$BODY$;
 
 CREATE OR REPLACE FUNCTION public.rho_reset_sequence (p_seq_name TEXT, p_key_column TEXT, p_table_name TEXT)
 	RETURNS TEXT
@@ -3623,98 +3728,6 @@ EXCEPTION
 		msgs := REPLACE(msgs, chr(10), '<br/>');
 	END IF;
 	RETURN msgs;
-END;
-
-$BODY$;
-
-CREATE OR REPLACE FUNCTION accb.istransprmttd (p_org_id integer, p_accntid integer, p_trnsdate character varying, p_amnt numeric)
-	RETURNS character varying
-	LANGUAGE 'plpgsql'
-	COST 100 VOLATILE
-	AS $BODY$
-	<< outerblock >>
-DECLARE
-	v_res character varying(1) := '0';
-	trnsDte timestamp;
-	dte1 timestamp;
-	dte1Or timestamp;
-	dte2 timestamp;
-	prdHdrID bigint := - 1;
-	noTrnsDatesLov character varying(200) := '';
-	noTrnsDayLov character varying(200) := '';
-	actvBdgtID bigint := - 1;
-	amntLmt numeric := 0;
-	bdte1 timestamp;
-	bdte2 timestamp;
-	crntBals numeric := 0;
-	actn character varying(200) := '';
-BEGIN
-	IF coalesce(p_accntID, - 1) <= 0 THEN
-		RETURN 'ERROR:Account Number cannot be empty!';
-	END IF;
-	IF p_trnsdate = '' THEN
-		RETURN 'ERROR:Transaction Date cannot be empty!';
-	END IF;
-	trnsDte := to_timestamp(p_trnsdate, 'DD-Mon-YYYY HH24:MI:SS');
-	dte1 := to_timestamp(accb.getLtstPrdStrtDate (), 'DD-Mon-YYYY HH24:MI:SS');
-	dte1Or := to_timestamp(accb.getLastPrdClseDate (p_org_id), 'DD-Mon-YYYY HH24:MI:SS');
-	dte2 := to_timestamp(accb.getLtstPrdEndDate (), 'DD-Mon-YYYY HH24:MI:SS');
-
-	/*IF (trnsDte <= dte1Or)
-	 THEN
-	 RETURN 'ERROR:Transaction Date cannot be On or Before ' || to_char(dte1Or, 'DD-Mon-YYYY HH24:MI:SS');
-	 END IF;
-	 IF (trnsDte < dte1)
-	 THEN
-	 RETURN 'ERROR:Transaction Date cannot be before ' || to_char(dte1, 'DD-Mon-YYYY HH24:MI:SS');
-	 END IF;
-	 IF (trnsDte > dte2)
-	 THEN
-	 RETURN 'ERROR:Transaction Date cannot be after ' || to_char(dte2, 'DD-Mon-YYYY HH24:MI:SS');
-	 END IF;*/
-	--Check if trnsDate exists in an Open Period
-	prdHdrID := accb.getPrdHdrID (p_org_id);
-	IF (prdHdrID > 0) THEN
-		IF (accb.getTrnsDteOpenPrdLnID (prdHdrID, to_char(trnsDte, 'YYYY-MM-DD HH24:MI:SS')) < 0) THEN
-			RETURN 'ERROR:Cannot use a Transaction Date (' || to_char(trnsDte, 'DD-Mon-YYYY HH24:MI:SS') || ') which does not exist in any OPEN period!';
-		END IF;
-		--Check if Date is not in Disallowed Dates
-		noTrnsDatesLov := gst.getGnrlRecNm ('accb.accb_periods_hdr', 'periods_hdr_id', 'no_trns_dates_lov_nm', prdHdrID);
-		noTrnsDayLov := gst.getGnrlRecNm ('accb.accb_periods_hdr', 'periods_hdr_id', 'no_trns_wk_days_lov_nm', prdHdrID);
-		IF (noTrnsDatesLov != '') THEN
-			IF (gst.getEnbldPssblValID (UPPER(to_char(trnsDte, 'DD-Mon-YYYY')), gst.getEnbldLovID (noTrnsDatesLov)) > 0) THEN
-				RETURN 'ERROR:Transactions on this Date (' || to_char(trnsDte, 'DD-Mon-YYYY HH24:MI:SS') || ') have been banned on this system!';
-			END IF;
-		END IF;
-		--Check if Day of Week is not in Disaalowed days
-		IF (noTrnsDatesLov != '') THEN
-			IF (gst.getEnbldPssblValID (upper(to_char(trnsDte, 'DAY')), gst.getEnbldLovID (noTrnsDayLov)) > 0) THEN
-				RETURN 'ERROR:Transactions on this Day of Week (' || to_char(trnsDte, 'DAY') || ') have been banned on this system!';
-			END IF;
-		END IF;
-	END IF;
-	--//Amount must not disobey budget settings on that account
-	actvBdgtID := accb.getActiveBdgtID (p_org_id);
-	amntLmt := accb.getAcntsBdgtdAmnt1 (actvBdgtID, p_accntID, to_char(trnsDte, 'DD-Mon-YYYY HH24:MI:SS'));
-	bdte1 := to_timestamp(accb.getAcntsBdgtStrtDte (actvBdgtID, p_accntID, to_char(trnsDte, 'DD-Mon-YYYY HH24:MI:SS')), 'DD-Mon-YYYY HH24:MI:SS');
-	bdte2 := to_timestamp(accb.getAcntsBdgtEndDte (actvBdgtID, p_accntID, to_char(trnsDte, 'DD-Mon-YYYY HH24:MI:SS')), 'DD-Mon-YYYY HH24:MI:SS');
-	crntBals := accb.getTrnsSum (p_accntID, to_char(bdte1, 'DD-Mon-YYYY HH24:MI:SS'), to_char(bdte2, 'DD-Mon-YYYY HH24:MI:SS'), '1');
-	actn := accb.getAcntsBdgtLmtActn (actvBdgtID, p_accntID, to_char(trnsDte, 'DD-Mon-YYYY HH24:MI:SS'));
-	IF ((p_amnt + crntBals) > amntLmt) THEN
-		IF (actn = 'Disallow') THEN
-			RETURN 'ERROR:This transaction will cause budget on \r\nthe chosen account to be exceeded! ';
-		ELSIF (actn = 'Warn') THEN
-			RETURN 'SUCCESS:This is just to WARN you that the budget on \r\nthe chosen account will be exceeded!';
-		ELSIF (actn = 'Congratulate') THEN
-			RETURN 'SUCCESS:This is just to CONGRATULATE you for exceeding the targetted Amount!';
-		ELSE
-			RETURN 'SUCCESS:';
-		END IF;
-	END IF;
-	RETURN 'SUCCESS:';
-EXCEPTION
-	WHEN OTHERS THEN
-		RETURN 'ERROR:' || SQLERRM;
 END;
 
 $BODY$;
