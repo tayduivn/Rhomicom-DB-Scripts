@@ -1,5 +1,398 @@
--- FUNCTION: scm.approve_sales_prchsdoc(bigint, character varying, integer, bigint)
--- DROP FUNCTION scm.approve_sales_prchsdoc(bigint, character varying, integer, bigint);
+CREATE OR REPLACE FUNCTION scm.recalcsmmrys(
+	p_srcdocid bigint,
+	p_srcdoctype character varying,
+	p_cstmrid bigint,
+	p_invcurid integer,
+	p_docstatus character varying,
+	p_org_id integer,
+	p_who_rn bigint)
+    RETURNS character varying
+    LANGUAGE 'plpgsql'
+    COST 100
+    VOLATILE PARALLEL UNSAFE
+AS $BODY$
+<< outerblock >>
+  DECLARE
+  v_txID           INTEGER                := -1;
+  v_dscntID        INTEGER                := -1;
+  v_grndAmnt       NUMERIC                := 0;
+  v_pymntsAmnt     NUMERIC                := 0;
+  v_blsAmnt        NUMERIC                := 0;
+  v_smmryNm        CHARACTER VARYING(100) := '';
+  v_smmryID        BIGINT                 := -1;
+  v_codeCntr       INTEGER                := -1;
+  v_rcvblHdrID     BIGINT                 := -1;
+  v_SIDocID        BIGINT                 := -1;
+  v_reslt_1        TEXT                   := '';
+  vRD              RECORD;
+  v_rcvblDoctype   CHARACTER VARYING(200) := '';
+  v_strSrcDocType  CHARACTER VARYING(200) := '';
+  v_txAmnts        NUMERIC                := 0;
+  v_txAmnts1       NUMERIC                := 0;
+  v_dscntAmnts     NUMERIC                := 0;
+  v_snglDscnt      NUMERIC                := 0;
+  v_dscntAmnts1    NUMERIC                := 0;
+  v_extrChrgAmnts  NUMERIC                := 0;
+  v_extrChrgAmnts1 NUMERIC                := 0;
+  v_chrgID         INTEGER                := -1;
+  v_isParnt        CHARACTER VARYING(1)   := '0';
+  v_codeIDs        CHARACTER VARYING(100) := ',';
+  v_codeIDArrys    TEXT[];
+  v_actlblsAmnt    NUMERIC                := 0;
+  v_ttlDpsts       NUMERIC                := 0;
+  v_initAmnt       NUMERIC                := 0;
+  v_tmp            CHARACTER VARYING(200) := '';
+  v_unitAmnt       NUMERIC                := 0;
+  v_sllngPrc       NUMERIC                := 0;
+  v_qnty           NUMERIC                := 0;
+  v_msgs           TEXT                   := '';
+
+BEGIN
+  v_rcvblHdrID := accb.get_ScmRcvblsDocHdrID(p_srcDocID, p_srcDocType, p_org_id);
+  v_rcvblDoctype :=
+      gst.getGnrlRecNm('accb.accb_rcvbls_invc_hdr', 'rcvbls_invc_hdr_id', 'rcvbls_invc_type', v_rcvblHdrID);
+
+  v_grndAmnt := scm.getSalesDocGrndAmnt(p_srcDocID);
+  -- Grand Total
+  v_smmryNm := 'Grand Total';
+  v_smmryID := scm.getSalesSmmryItmID('5Grand Total', -1,
+                                      p_srcDocID, p_srcDocType);
+  IF (v_smmryID <= 0) THEN
+    v_reslt_1 := scm.createSmmryItm('5Grand Total', v_smmryNm, v_grndAmnt, -1,
+                                    p_srcDocType, p_srcDocID, '1', p_who_rn);
+  ELSE
+    v_reslt_1 := scm.updateSmmryItm(v_smmryID, '5Grand Total', v_grndAmnt, '1', v_smmryNm, p_who_rn);
+  END IF;
+  --Total Payments
+  v_blsAmnt := 0;
+  v_pymntsAmnt := 0;
+  v_SIDocID := gst.getGnrlRecNm('scm.scm_sales_invc_hdr', 'invc_hdr_id', 'src_doc_hdr_id', p_srcDocID)::BIGINT;
+  v_strSrcDocType := gst.getGnrlRecNm('scm.scm_sales_invc_hdr', 'invc_hdr_id', 'invc_type', v_SIDocID);
+  IF (p_srcDocType = 'Sales Invoice') THEN
+    v_pymntsAmnt := scm.getRcvblsDocTtlPymnts(v_rcvblHdrID, v_rcvblDoctype);
+    --pymntsAmnt = Global.getSalesDocRcvdPymnts(srcDocID, srcDocType);
+    v_smmryNm := 'Total Payments Received';
+    v_smmryID := scm.getSalesSmmryItmID('6Total Payments Received', -1, p_srcDocID, p_srcDocType);
+    IF (v_smmryID <= 0) THEN
+      v_reslt_1 :=
+          scm.createSmmryItm('6Total Payments Received', v_smmryNm, v_pymntsAmnt, -1, p_srcDocType, p_srcDocID, '1',
+                             p_who_rn);
+    ELSE
+      v_reslt_1 := scm.updateSmmryItm(v_smmryID, '6Total Payments Received', v_pymntsAmnt, '1', v_smmryNm, p_who_rn);
+    END IF;
+  ELSIF (p_srcDocType = 'Sales Return' AND v_strSrcDocType = 'Sales Invoice') THEN
+    v_pymntsAmnt := scm.getRcvblsDocTtlPymnts(v_rcvblHdrID, v_rcvblDoctype);
+    v_smmryNm := 'Total Amount Refunded';
+    v_smmryID := scm.getSalesSmmryItmID('6Total Payments Received', -1, p_srcDocID, p_srcDocType);
+    IF (v_smmryID <= 0) THEN
+      v_reslt_1 := scm.createSmmryItm('6Total Payments Received', v_smmryNm, v_pymntsAmnt, -1,
+                                      p_srcDocType, p_srcDocID, '1', p_who_rn);
+    ELSE
+      v_reslt_1 := scm.updateSmmryItm(v_smmryID, '6Total Payments Received', v_pymntsAmnt, '1', v_smmryNm, p_who_rn);
+    END IF;
+  END IF;
+  v_codeCntr := 0;
+  --Tax Codes
+  v_txAmnts := 0;
+  v_dscntAmnts := 0;
+  v_extrChrgAmnts := 0;
+
+  v_txAmnts1 := 0;
+  v_dscntAmnts1 := 0;
+  v_extrChrgAmnts1 := 0;
+
+  UPDATE scm.scm_doc_amnt_smmrys
+  SET smmry_amnt = 0
+  WHERE (src_doc_type = p_srcDocType
+    AND src_doc_hdr_id = p_srcDocID
+    AND (code_id_behind > 0 OR substr(smmry_type, 1, 1) IN ('2', '3', '4')));
+
+  FOR vRD IN (SELECT a.invc_det_ln_id,
+                     a.itm_id,
+                     a.doc_qty * a.rented_itm_qty                                          doc_qty,
+                     a.unit_selling_price,
+                     (a.doc_qty * a.unit_selling_price * a.rented_itm_qty)                 amnt,
+                     a.store_id,
+                     a.crncy_id,
+                     (a.doc_qty - a.qty_trnsctd_in_dest_doc)                               avlbl_qty,
+                     a.src_line_id,
+                     a.tax_code_id,
+                     a.dscnt_code_id,
+                     a.chrg_code_id,
+                     a.rtrn_reason,
+                     a.consgmnt_ids,
+                     a.orgnl_selling_price,
+                     b.base_uom_id,
+                     b.item_code,
+                     b.item_desc,
+                     c.uom_name,
+                     a.is_itm_delivered,
+                     REPLACE(a.extra_desc || ' (' || a.other_mdls_doc_type || ')', ' ()', ''),
+                     a.other_mdls_doc_id,
+                     a.other_mdls_doc_type,
+                     a.lnkd_person_id,
+                     REPLACE(prs.get_prsn_surname(a.lnkd_person_id) || ' ('
+                               || prs.get_prsn_loc_id(a.lnkd_person_id) || ')', ' ()', '') fullnm,
+                     CASE WHEN a.alternate_item_name = '' THEN b.item_desc ELSE a.alternate_item_name END,
+                     d.cat_name,
+                     REPLACE(a.cogs_acct_id || ',' || a.sales_rev_accnt_id || ',' || a.sales_ret_accnt_id || ',' ||
+                             a.purch_ret_accnt_id || ',' || a.expense_accnt_id,
+                             '-1,-1,-1,-1,-1',
+                             b.cogs_acct_id || ',' || b.sales_rev_accnt_id || ',' || b.sales_ret_accnt_id || ',' ||
+                             b.purch_ret_accnt_id || ',' || b.expense_accnt_id)            itm_accnts,
+                     b.item_type
+              FROM scm.scm_sales_invc_det a,
+                   inv.inv_itm_list b,
+                   inv.unit_of_measure c,
+                   inv.inv_product_categories d
+              WHERE (a.invc_hdr_id = p_srcDocID AND a.invc_hdr_id > 0 AND a.itm_id = b.item_id AND
+                     b.base_uom_id = c.uom_id AND d.cat_id = b.category_id)
+              ORDER BY a.invc_det_ln_id, b.category_id)
+    LOOP
+      v_txID := vRD.tax_code_id;
+      v_dscntID := vRD.dscnt_code_id;
+      v_chrgID := vRD.chrg_code_id;
+      v_unitAmnt := vRD.orgnl_selling_price;
+	  v_sllngPrc := vRD.unit_selling_price;
+      v_qnty := vRD.doc_qty;
+      v_tmp := '';
+      v_snglDscnt := 0;
+      IF (v_dscntID > 0) THEN
+        v_isParnt := gst.getGnrlRecNm('scm.scm_tax_codes', 'code_id', 'is_parent', v_dscntID);
+        IF (v_isParnt = '1') THEN
+          v_codeIDs := gst.getGnrlRecNm('scm.scm_tax_codes', 'code_id', 'child_code_ids', v_dscntID);
+          v_codeIDArrys := string_to_array(BTRIM(v_codeIDs, ','), ',');
+          v_snglDscnt := 0;
+          FOR j IN 1.. array_length(v_codeIDArrys, 1)
+            LOOP
+              IF ((v_codeIDArrys [ j]::INTEGER) > 0) THEN
+                v_snglDscnt := v_snglDscnt + scm.getDscntLessTax(v_txID,
+                                                                 scm.getSalesDocCodesAmnt((v_codeIDArrys [ j]::INTEGER),
+                                                                                          v_sllngPrc, 1));
+                v_dscntAmnts1 := scm.getDscntLessTax(v_txID,
+                                                     scm.getSalesDocCodesAmnt((v_codeIDArrys [ j]::INTEGER), v_sllngPrc,
+                                                                              v_qnty));
+                v_dscntAmnts := v_dscntAmnts + v_dscntAmnts1;
+                v_tmp := gst.getGnrlRecNm('scm.scm_tax_codes', 'code_id', 'code_name', (v_codeIDArrys [ j]::INTEGER));
+                v_smmryID := scm.getSalesSmmryItmID('3Discount', (v_codeIDArrys [ j]::INTEGER),
+                                                    p_srcDocID, p_srcDocType);
+                IF (v_smmryID <= 0 AND v_dscntAmnts1 > 0) THEN
+                  v_reslt_1 :=
+                      scm.createSmmryItm('3Discount', v_tmp, v_dscntAmnts1, (v_codeIDArrys [ j]::INTEGER), p_srcDocType,
+                                         p_srcDocID, '1', p_who_rn);
+                ELSIF (v_dscntAmnts1 > 0) THEN
+                  v_reslt_1 := scm.updateSmmryItmAddOn(v_smmryID, '3Discount', v_dscntAmnts1, '1', v_tmp, p_who_rn);
+                END IF;
+                v_codeCntr := v_codeCntr + 1;
+              END IF;
+            END LOOP;
+        ELSE
+          v_snglDscnt := scm.getDscntLessTax(v_txID, scm.getSalesDocCodesAmnt(v_dscntID, v_sllngPrc, 1));
+          v_dscntAmnts1 := scm.getDscntLessTax(v_txID, scm.getSalesDocCodesAmnt(v_dscntID, v_sllngPrc, v_qnty));
+          v_dscntAmnts := v_dscntAmnts + v_dscntAmnts1;
+          --MessageBox.Show(dscntAmnts1.ToString());
+          v_tmp = gst.getGnrlRecNm('scm.scm_tax_codes', 'code_id', 'code_name', v_dscntID);
+          v_smmryID = scm.getSalesSmmryItmID('3Discount', v_dscntID, p_srcDocID, p_srcDocType);
+          IF (v_smmryID <= 0 AND v_dscntAmnts1 > 0) THEN
+            v_reslt_1 := scm.createSmmryItm('3Discount', v_tmp, v_dscntAmnts1, v_dscntID, p_srcDocType, p_srcDocID, '1',
+                                            p_who_rn);
+          ELSIF (v_dscntAmnts1 > 0) THEN
+            v_reslt_1 := scm.updateSmmryItmAddOn(v_smmryID, '3Discount', v_dscntAmnts1, '', v_tmp, p_who_rn);
+          END IF;
+          v_codeCntr := v_codeCntr + 1;
+        END IF;
+        --codeCntr++;
+      END IF;
+
+      IF (v_txID > 0) THEN
+        v_isParnt := gst.getGnrlRecNm('scm.scm_tax_codes', 'code_id', 'is_parent', v_txID);
+        IF (v_isParnt = '1') THEN
+          v_codeIDs := gst.getGnrlRecNm('scm.scm_tax_codes', 'code_id', 'child_code_ids', v_txID);
+          v_codeIDArrys := string_to_array(BTRIM(v_codeIDs, ','), ',');
+          --snglDscnt = 0;
+
+          FOR j IN 1.. array_length(v_codeIDArrys, 1)
+            LOOP
+              IF ((v_codeIDArrys [ j]::INTEGER) > 0) THEN
+                v_txAmnts1 := scm.getSalesDocCodesAmnt((v_codeIDArrys [ j]::INTEGER), v_unitAmnt - v_snglDscnt, v_qnty);
+                v_txAmnts := v_txAmnts + v_txAmnts1;
+                v_tmp := gst.getGnrlRecNm('scm.scm_tax_codes', 'code_id', 'code_name', (v_codeIDArrys [ j]::INTEGER));
+                v_smmryID := scm.getSalesSmmryItmID('2Tax', (v_codeIDArrys [ j]::INTEGER), p_srcDocID, p_srcDocType);
+                IF (v_smmryID <= 0 AND v_txAmnts1 > 0) THEN
+                  v_reslt_1 := scm.createSmmryItm('2Tax', v_tmp, v_txAmnts1, (v_codeIDArrys [ j]::INTEGER),
+                                                  p_srcDocType, p_srcDocID, '1', p_who_rn);
+                ELSIF (v_txAmnts1 > 0) THEN
+                  v_reslt_1 := scm.updateSmmryItmAddOn(v_smmryID, '2Tax', v_txAmnts1, '1', v_tmp, p_who_rn);
+                END IF;
+                v_codeCntr := v_codeCntr + 1;
+              END IF;
+            END LOOP;
+        ELSE
+          v_txAmnts1 := scm.getSalesDocCodesAmnt(v_txID, v_unitAmnt - v_snglDscnt, v_qnty);
+          v_txAmnts := v_txAmnts + v_txAmnts1;
+          v_tmp := gst.getGnrlRecNm('scm.scm_tax_codes', 'code_id', 'code_name', v_txID);
+
+          v_smmryID := scm.getSalesSmmryItmID('2Tax', v_txID, p_srcDocID, p_srcDocType);
+          IF (v_smmryID <= 0 AND v_txAmnts1 > 0) THEN
+            v_reslt_1 := scm.createSmmryItm('2Tax', v_tmp, v_txAmnts1, v_txID,
+                                            p_srcDocType, p_srcDocID, '1', p_who_rn);
+          ELSIF (v_txAmnts1 > 0) THEN
+            v_reslt_1 := scm.updateSmmryItmAddOn(v_smmryID, '2Tax', v_txAmnts1, '1', v_tmp, p_who_rn);
+          END IF;
+          v_codeCntr := v_codeCntr + 1;
+        END IF;
+      END IF;
+
+      IF (v_chrgID > 0) THEN
+        v_isParnt := gst.getGnrlRecNm('scm.scm_tax_codes', 'code_id', 'is_parent', v_chrgID);
+        IF (v_isParnt = '1') THEN
+          v_codeIDs := gst.getGnrlRecNm('scm.scm_tax_codes', 'code_id', 'child_code_ids', v_chrgID);
+          v_codeIDArrys := string_to_array(BTRIM(v_codeIDs, ','), ',');
+          --snglDscnt = 0;
+          FOR j IN 1.. array_length(v_codeIDArrys, 1)
+            LOOP
+              IF ((v_codeIDArrys [ j]::INTEGER) > 0) THEN
+                v_extrChrgAmnts1 := scm.getSalesDocCodesAmnt((v_codeIDArrys [ j]::INTEGER), v_unitAmnt, v_qnty);
+                v_extrChrgAmnts := v_extrChrgAmnts + v_extrChrgAmnts1;
+                v_tmp := gst.getGnrlRecNm('scm.scm_tax_codes', 'code_id', 'code_name', (v_codeIDArrys [ j]::INTEGER));
+                v_smmryID :=
+                    scm.getSalesSmmryItmID('4Extra Charge', (v_codeIDArrys [ j]::INTEGER), p_srcDocID, p_srcDocType);
+                IF (v_smmryID <= 0 AND v_extrChrgAmnts1 > 0) THEN
+                  v_reslt_1 :=
+                      scm.createSmmryItm('4Extra Charge', v_tmp, v_extrChrgAmnts1, (v_codeIDArrys [ j]::INTEGER),
+                                         p_srcDocType, p_srcDocID, '1', p_who_rn);
+                ELSIF (v_extrChrgAmnts1 > 0) THEN
+                  v_reslt_1 :=
+                      scm.updateSmmryItmAddOn(v_smmryID, '4Extra Charge', v_extrChrgAmnts1, '1', v_tmp, p_who_rn);
+                END IF;
+                v_codeCntr := v_codeCntr + 1;
+              END IF;
+            END LOOP;
+        ELSE
+          v_extrChrgAmnts1 := scm.getSalesDocCodesAmnt(v_chrgID, v_unitAmnt, v_qnty);
+          v_extrChrgAmnts := v_extrChrgAmnts + v_extrChrgAmnts1;
+          v_tmp := gst.getGnrlRecNm('scm.scm_tax_codes', 'code_id', 'code_name', v_chrgID);
+
+          v_smmryID := scm.getSalesSmmryItmID('4Extra Charge', v_chrgID, p_srcDocID, p_srcDocType);
+          IF (v_smmryID <= 0 AND v_extrChrgAmnts1 > 0) THEN
+            v_reslt_1 :=
+                scm.createSmmryItm('4Extra Charge', v_tmp, v_extrChrgAmnts1, v_chrgID, p_srcDocType, p_srcDocID, '1',
+                                   p_who_rn);
+          ELSIF (v_extrChrgAmnts1 > 0) THEN
+            v_reslt_1 := scm.updateSmmryItmAddOn(v_smmryID, '4Extra Charge', v_extrChrgAmnts1, '1', v_tmp, p_who_rn);
+          END IF;
+          v_codeCntr := v_codeCntr + 1;
+        END IF;
+      END IF;
+    END LOOP;
+
+  IF (v_txAmnts <= 0) THEN
+    v_reslt_1 := scm.deleteSalesSmmryItm(p_srcDocID, p_srcDocType, '2Tax');
+  END IF;
+
+  IF (v_dscntAmnts <= 0) THEN
+    v_reslt_1 := scm.deleteSalesSmmryItm(p_srcDocID, p_srcDocType, '3Discount');
+  END IF;
+
+  IF (v_extrChrgAmnts <= 0) THEN
+    v_reslt_1 := scm.deleteSalesSmmryItm(p_srcDocID, p_srcDocType, '4Extra Charge');
+  END IF;
+  v_reslt_1 := scm.deleteZeroSmmryItms(p_srcDocID, p_srcDocType);
+  --Initial Amount
+  v_initAmnt := 0;
+  IF (v_txAmnts <= 0 AND v_dscntAmnts <= 0 AND v_extrChrgAmnts <= 0) THEN
+    v_reslt_1 := scm.deleteSalesSmmryItm(p_srcDocID, p_srcDocType, '1Initial Amount');
+  ELSIF (v_codeCntr > 0) THEN
+    v_smmryNm := 'Initial Amount';
+    v_smmryID := scm.getSalesSmmryItmID('1Initial Amount', -1, p_srcDocID, p_srcDocType);
+    v_initAmnt := v_grndAmnt;
+    IF (v_smmryID <= 0) THEN
+      v_reslt_1 := scm.createSmmryItm('1Initial Amount', v_smmryNm, v_initAmnt, -1,
+                                      p_srcDocType, p_srcDocID, '1', p_who_rn);
+    ELSE
+      v_reslt_1 := scm.updateSmmryItm(v_smmryID, '1Initial Amount', v_initAmnt, '1', v_smmryNm, p_who_rn);
+    END IF;
+  END IF;
+
+  -- Grand Total
+  v_grndAmnt := v_grndAmnt + v_txAmnts + v_extrChrgAmnts - v_dscntAmnts;
+  v_smmryNm := 'Grand Total';
+  v_smmryID := scm.getSalesSmmryItmID('5Grand Total', -1,
+                                      p_srcDocID, p_srcDocType);
+  IF (v_smmryID <= 0) THEN
+    v_reslt_1 := scm.createSmmryItm('5Grand Total', v_smmryNm, v_grndAmnt, -1,
+                                    p_srcDocType, p_srcDocID, '1', p_who_rn);
+  ELSE
+    v_reslt_1 := scm.updateSmmryItm(v_smmryID, '5Grand Total', v_grndAmnt, '1', v_smmryNm, p_who_rn);
+  END IF;
+
+  --Total Payments
+  IF (p_srcDocType = 'Sales Invoice') THEN
+    --Change Given/Outstanding Balance
+    v_blsAmnt := v_grndAmnt - v_pymntsAmnt;
+    IF (round(v_blsAmnt, 2) >= 0.00) THEN
+      v_smmryNm := 'Outstanding Balance';
+    ELSE
+      v_smmryNm := 'Change Given to Customer';
+    END IF;
+    v_smmryID := scm.getSalesSmmryItmID('7Change/Balance', -1, p_srcDocID, p_srcDocType);
+    IF (v_smmryID <= 0) THEN
+      v_reslt_1 :=
+          scm.createSmmryItm('7Change/Balance', v_smmryNm, v_blsAmnt, -1, p_srcDocType, p_srcDocID, '1', p_who_rn);
+    ELSE
+      v_reslt_1 := scm.updateSmmryItm(v_smmryID, '7Change/Balance', v_blsAmnt, '1', v_smmryNm, p_who_rn);
+    END IF;
+    --Customer's Total Deposits
+    v_ttlDpsts := scm.getCstmrDpsts(p_cstmrID, p_invCurID);
+    v_smmryNm := 'Total Deposits';
+    v_smmryID := scm.getSalesSmmryItmID('8Deposits', -1, p_srcDocID, p_srcDocType);
+    IF (v_smmryID <= 0) THEN
+      v_reslt_1 := scm.createSmmryItm('8Deposits', v_smmryNm, v_ttlDpsts, -1, p_srcDocType, p_srcDocID, '1', p_who_rn);
+    ELSE
+      v_reslt_1 := scm.updateSmmryItm(v_smmryID, '8Deposits', v_ttlDpsts, '1', v_smmryNm, p_who_rn);
+    END IF;
+
+    --Actual Change or Balance
+    v_actlblsAmnt := v_blsAmnt - v_ttlDpsts;
+    IF (round(v_actlblsAmnt, 2) >= 0.00) THEN
+      v_smmryNm := 'Actual Outstanding Balance';
+    ELSE
+      v_smmryNm := 'Amount to be Refunded to Customer';
+    END IF;
+    v_smmryID := scm.getSalesSmmryItmID('9Actual_Change/Balance', -1, p_srcDocID, p_srcDocType);
+    IF (v_smmryID <= 0) THEN
+      v_reslt_1 := scm.createSmmryItm('9Actual_Change/Balance', v_smmryNm, v_actlblsAmnt, -1,
+                                      p_srcDocType, p_srcDocID, '1', p_who_rn);
+    ELSE
+      v_reslt_1 := scm.updateSmmryItm(v_smmryID, '9Actual_Change/Balance', v_actlblsAmnt, '1', v_smmryNm, p_who_rn);
+    END IF;
+  ELSIF (p_srcDocType = 'Sales Return' AND v_strSrcDocType = 'Sales Invoice') THEN
+    --Change Given/Outstanding Balance
+    v_blsAmnt := v_grndAmnt - v_pymntsAmnt;
+    IF (round(v_blsAmnt, 2) >= 0.00) THEN
+      v_smmryNm := 'Outstanding Balance';
+    ELSE
+      v_smmryNm := 'Change Received from Customer';
+    END IF;
+    v_smmryID := scm.getSalesSmmryItmID('7Change/Balance', -1,
+                                        p_srcDocID, p_srcDocType);
+    IF (v_smmryID <= 0) THEN
+      v_reslt_1 := scm.createSmmryItm('7Change/Balance', v_smmryNm, v_blsAmnt, -1,
+                                      p_srcDocType, p_srcDocID, '1', p_who_rn);
+    ELSE
+      v_reslt_1 := scm.updateSmmryItm(v_smmryID, '7Change/Balance', v_blsAmnt, '1', v_smmryNm, p_who_rn);
+    END IF;
+  END IF;
+  v_reslt_1 := scm.roundSmmryItms(p_srcDocID, p_srcDocType);
+
+  RETURN 'SUCCESS:';
+EXCEPTION
+  WHEN OTHERS
+    THEN
+      RETURN 'ERROR:' || SQLERRM || '::MSGs::' || v_msgs;
+END;
+$BODY$;
+
 CREATE OR REPLACE FUNCTION scm.approve_sales_prchsdoc(
 	p_dochdrid bigint,
 	p_dockind character varying,
@@ -465,5 +858,413 @@ BEGIN
 EXCEPTION
 	WHEN OTHERS THEN
 		RETURN 'ERROR:APPRV_SALES:' || SQLERRM || v_reslt_1;
+END;
+$BODY$;
+
+CREATE OR REPLACE FUNCTION accb.creatercvblsdocdet(
+	p_smmryid bigint,
+	p_hdrid bigint,
+	p_linetype character varying,
+	p_linedesc character varying,
+	p_entrdamnt numeric,
+	p_entrdcurrid integer,
+	p_codebhnd integer,
+	p_doctype character varying,
+	p_autocalc character varying,
+	p_incrdcrs1 character varying,
+	p_costngid integer,
+	p_incrdcrs2 character varying,
+	p_blncgaccntid integer,
+	p_prepaydochdrid bigint,
+	p_vldystatus character varying,
+	p_orgnllnid bigint,
+	p_funccurrid integer,
+	p_accntcurrid integer,
+	p_funccurrrate numeric,
+	p_accntcurrrate numeric,
+	p_funccurramnt numeric,
+	p_accntcurramnt numeric,
+	p_initial_amnt_line_id bigint,
+	p_line_qty numeric,
+	p_unit_price numeric,
+	p_ref_doc_number character varying,
+	p_slctd_amnt_brkdwns character varying,
+	p_tax_code_id integer,
+	p_whtax_code_id integer,
+	p_dscnt_code_id integer,
+	p_who_rn bigint)
+    RETURNS character varying
+    LANGUAGE 'plpgsql'
+    COST 100
+    VOLATILE PARALLEL UNSAFE
+AS $BODY$
+<< outerblock >>
+  DECLARE
+  v_reslt_1       TEXT                    := '';
+  v_smmryID       BIGINT                  := -1;
+  c_codeIDs       CHARACTER VARYING(4000) := '';
+  v_codeIDs       CHARACTER VARYING(4000)[];
+  v_ArryLen       INTEGER                 := 0;
+  v_tax_code_id   INTEGER                 := -1;
+  v_tax_accid     INTEGER                 := -1;
+  v_txsmmryNm     CHARACTER VARYING(200)  := '';
+  v_dcntAMnt      NUMERIC                 := 0;
+  v_codeAmnt      NUMERIC                 := 0;
+  v_lnSmmryLnID   BIGINT                  := -1;
+  c_accnts        CHARACTER VARYING(4000) := '';
+  v_accnts        CHARACTER VARYING(4000)[];
+  v_funcCurrAmnt  NUMERIC                 := 0;
+  v_accntCurrAmnt NUMERIC                 := 0;
+  v_txlineDesc    CHARACTER VARYING(300)  := '';
+  p_orgid         INTEGER                 := -1;
+  v_dscntAmnts     NUMERIC                := 0;
+  v_dscntAmnts1     NUMERIC                := 0;
+  v_snglDscnt      NUMERIC                := 0;
+  v_sllngPrc       NUMERIC                := 0;
+BEGIN
+  v_reslt_1 := accb.createRcvblsDocDet1(p_smmryID, p_hdrID, p_lineType, p_lineDesc, p_entrdAmnt,
+                                        p_entrdCurrID, p_codeBhnd, p_docType, p_autoCalc, p_incrDcrs1,
+                                        p_costngID, p_incrDcrs2, p_blncgAccntID, p_prepayDocHdrID, p_vldyStatus,
+                                        p_orgnlLnID, p_funcCurrID, p_accntCurrID, p_funcCurrRate, p_accntCurrRate,
+                                        p_funcCurrAmnt,
+                                        p_accntCurrAmnt, p_initial_amnt_line_id, p_line_qty, p_unit_price,
+                                        p_ref_doc_number,
+                                        p_slctd_amnt_brkdwns, p_tax_code_id, p_whtax_code_id, p_dscnt_code_id,
+                                        p_who_rn);
+  IF v_reslt_1 NOT LIKE 'SUCCESS:%'
+  THEN
+    RAISE EXCEPTION USING
+      ERRCODE = 'RHERR',
+      MESSAGE = v_reslt_1,
+      HINT = v_reslt_1;
+  END IF;
+
+  IF p_initial_amnt_line_id <= 0 AND p_lineType = '1Initial Amount' THEN
+    p_orgid := gst.getGnrlRecNm('accb.accb_rcvbls_invc_hdr', 'rcvbls_invc_hdr_id', 'org_id', p_hdrID)::INTEGER;
+    v_smmryID := p_smmryID;
+	
+	v_snglDscnt :=0;
+    IF (p_tax_code_id > 0 AND scm.istaxaparent(p_tax_code_id) = '1') THEN
+      c_codeIDs := gst.getGnrlRecNm('scm.scm_tax_codes', 'code_id', 'child_code_ids', p_tax_code_id);
+      v_codeIDs := string_to_array(BTRIM(c_codeIDs, ', '), ',');
+
+      v_ArryLen := array_length(v_codeIDs, 1);
+      FOR y IN 1..v_ArryLen
+        LOOP
+          v_tax_code_id := v_codeIDs [ y];
+          v_txsmmryNm := gst.getGnrlRecNm('scm.scm_tax_codes', 'code_id', 'code_name', v_tax_code_id);
+          --v_dcntAMnt := scm.getSalesDocCodesAmnt(p_dscnt_code_id, p_entrdAmnt, 1);
+          v_codeAmnt := scm.getSalesDocCodesAmnt(v_tax_code_id, p_entrdAmnt - v_snglDscnt, 1);    
+          END LOOP;
+    ELSIF (p_tax_code_id > 0) THEN
+      v_tax_code_id := p_tax_code_id;
+      v_txsmmryNm := gst.getGnrlRecNm('scm.scm_tax_codes', 'code_id', 'code_name', v_tax_code_id);
+      --v_dcntAMnt := scm.getSalesDocCodesAmnt(p_dscnt_code_id, p_entrdAmnt, 1);
+      v_codeAmnt := scm.getSalesDocCodesAmnt(v_tax_code_id, p_entrdAmnt - v_snglDscnt, 1);
+    END IF;
+
+	v_sllngPrc := v_codeAmnt +p_entrdAmnt;
+
+    IF (p_dscnt_code_id > 0 AND scm.istaxaparent(p_dscnt_code_id) = '1') THEN
+      c_codeIDs := gst.getGnrlRecNm('scm.scm_tax_codes', 'code_id', 'child_code_ids', p_dscnt_code_id);
+      v_codeIDs := string_to_array(BTRIM(c_codeIDs, ', '), ',');
+      
+      v_ArryLen := array_length(v_codeIDs, 1);
+      FOR y IN 1..v_ArryLen
+        LOOP
+          v_tax_code_id := v_codeIDs [y];
+          v_txsmmryNm := gst.getGnrlRecNm('scm.scm_tax_codes', 'code_id', 'code_name', v_tax_code_id);
+
+		  v_snglDscnt := scm.getDscntLessTax(p_tax_code_id, scm.getSalesDocCodesAmnt(v_tax_code_id, v_sllngPrc, 1));
+          v_dscntAmnts1 := scm.getDscntLessTax(p_tax_code_id, scm.getSalesDocCodesAmnt(v_tax_code_id, v_sllngPrc, p_line_qty));
+          v_dscntAmnts := v_dscntAmnts + v_dscntAmnts1;
+          
+		  v_codeAmnt := v_dscntAmnts;--scm.getSalesDocCodesAmnt(v_tax_code_id, p_entrdAmnt, 1);
+          v_lnSmmryLnID := accb.getRcvblsLnDetID('3Discount', v_tax_code_id, v_smmryID);
+          c_accnts := accb.getRcvblBalncnAccnt('3Discount', v_tax_code_id, -1, -1, p_docType, p_orgid);
+          v_accnts := string_to_array(BTRIM(c_accnts, '; '), ';');
+          v_funcCurrAmnt := v_codeAmnt * p_funcCurrRate;
+          v_accntCurrAmnt := v_codeAmnt * p_accntCurrRate;
+          v_txlineDesc := v_txsmmryNm || ' on ' || p_lineDesc || ' (' || p_entrdAmnt || ')';
+          v_tax_accid := org.get_accnt_id_frmaccnt(p_costngID, v_accnts [ 4]::INTEGER);
+          IF (v_lnSmmryLnID <= 0) THEN
+            v_lnSmmryLnID := nextval('accb.accb_rcvbl_amnt_smmrys_rcvbl_smmry_id_seq');
+            v_reslt_1 := accb.createRcvblsDocDet1(v_lnSmmryLnID, p_hdrID, '3Discount', v_txlineDesc, v_codeAmnt,
+                                                  p_entrdCurrID, v_tax_code_id, p_docType, '1', v_accnts [ 3],
+                                                  v_tax_accid, v_accnts [ 1],
+                                                  p_blncgAccntID, -1, p_vldyStatus, -1, p_funcCurrID, p_accntCurrID,
+                                                  p_funcCurrRate, p_accntCurrRate, v_funcCurrAmnt,
+                                                  v_accntCurrAmnt, v_smmryID, 1, v_codeAmnt, p_ref_doc_number,
+                                                  ',', -1, -1, -1, p_who_rn);
+            IF v_reslt_1 NOT LIKE 'SUCCESS:%'
+            THEN
+              RAISE EXCEPTION USING
+                ERRCODE = 'RHERR',
+                MESSAGE = v_reslt_1,
+                HINT = v_reslt_1;
+            END IF;
+          ELSE
+            v_reslt_1 := accb.updtRcvblsDocDet1(v_lnSmmryLnID, p_hdrID, '3Discount', v_txlineDesc, v_codeAmnt,
+                                                p_entrdCurrID, v_tax_code_id, p_docType, '1', v_accnts [ 3],
+                                                v_tax_accid, v_accnts [ 1], p_blncgAccntID, -1, p_vldyStatus,
+                                                -1, p_funcCurrID, p_accntCurrID, p_funcCurrRate, p_accntCurrRate,
+                                                v_funcCurrAmnt, v_accntCurrAmnt, v_smmryID, 1, v_codeAmnt,
+                                                p_ref_doc_number, ',', -1, -1, -1, p_who_rn);
+            IF v_reslt_1 NOT LIKE 'SUCCESS:%'
+            THEN
+              RAISE EXCEPTION USING
+                ERRCODE = 'RHERR',
+                MESSAGE = v_reslt_1,
+                HINT = v_reslt_1;
+            END IF;
+          END IF;
+          END LOOP;
+    ELSIF (p_dscnt_code_id > 0) THEN
+      v_tax_code_id := p_dscnt_code_id;
+      v_txsmmryNm := gst.getGnrlRecNm('scm.scm_tax_codes', 'code_id', 'code_name', v_tax_code_id);
+	  
+		  v_snglDscnt := scm.getDscntLessTax(p_tax_code_id, scm.getSalesDocCodesAmnt(v_tax_code_id, v_sllngPrc, 1));
+          v_dscntAmnts1 := scm.getDscntLessTax(p_tax_code_id, scm.getSalesDocCodesAmnt(v_tax_code_id, v_sllngPrc, p_line_qty));
+          v_dscntAmnts := v_dscntAmnts + v_dscntAmnts1;
+
+      v_codeAmnt := v_dscntAmnts;--scm.getSalesDocCodesAmnt(v_tax_code_id, p_entrdAmnt, 1);
+      v_lnSmmryLnID := accb.getRcvblsLnDetID('3Discount', v_tax_code_id, v_smmryID);
+      c_accnts := accb.getRcvblBalncnAccnt('3Discount', v_tax_code_id, -1, -1, p_docType, p_orgid);
+      v_accnts := string_to_array(BTRIM(c_accnts, '; '), ';');
+      v_funcCurrAmnt := v_codeAmnt * p_funcCurrRate;
+      v_accntCurrAmnt := v_codeAmnt * p_accntCurrRate;
+      v_txlineDesc := v_txsmmryNm || ' on ' || p_lineDesc || ' (' || p_entrdAmnt || ')';
+      v_tax_accid := org.get_accnt_id_frmaccnt(p_costngID, v_accnts [ 4]::INTEGER);
+      IF (v_lnSmmryLnID <= 0) THEN
+        v_lnSmmryLnID := nextval('accb.accb_rcvbl_amnt_smmrys_rcvbl_smmry_id_seq');
+        v_reslt_1 := accb.createRcvblsDocDet1(v_lnSmmryLnID, p_hdrID, '3Discount', v_txlineDesc, v_codeAmnt,
+                                              p_entrdCurrID, v_tax_code_id, p_docType, '1', v_accnts [ 3],
+                                              v_tax_accid, v_accnts [ 1],
+                                              p_blncgAccntID, -1, p_vldyStatus, -1, p_funcCurrID, p_accntCurrID,
+                                              p_funcCurrRate, p_accntCurrRate, v_funcCurrAmnt,
+                                              v_accntCurrAmnt, v_smmryID, 1, v_codeAmnt, p_ref_doc_number,
+                                              ',', -1, -1, -1, p_who_rn);
+        IF v_reslt_1 NOT LIKE 'SUCCESS:%'
+        THEN
+          RAISE EXCEPTION USING
+            ERRCODE = 'RHERR',
+            MESSAGE = v_reslt_1,
+            HINT = v_reslt_1;
+        END IF;
+      ELSE
+        v_reslt_1 := accb.updtRcvblsDocDet1(v_lnSmmryLnID, p_hdrID, '3Discount', v_txlineDesc, v_codeAmnt,
+                                            p_entrdCurrID, v_tax_code_id, p_docType, '1', v_accnts [ 3],
+                                            v_tax_accid, v_accnts [ 1], p_blncgAccntID, -1, p_vldyStatus,
+                                            -1, p_funcCurrID, p_accntCurrID, p_funcCurrRate, p_accntCurrRate,
+                                            v_funcCurrAmnt, v_accntCurrAmnt, v_smmryID, 1, v_codeAmnt,
+                                            p_ref_doc_number, ',', -1, -1, -1, p_who_rn);
+        IF v_reslt_1 NOT LIKE 'SUCCESS:%'
+        THEN
+          RAISE EXCEPTION USING
+            ERRCODE = 'RHERR',
+            MESSAGE = v_reslt_1,
+            HINT = v_reslt_1;
+        END IF;
+      END IF;
+    END IF;
+
+    IF (p_tax_code_id > 0 AND scm.istaxaparent(p_tax_code_id) = '1') THEN
+      c_codeIDs := gst.getGnrlRecNm('scm.scm_tax_codes', 'code_id', 'child_code_ids', p_tax_code_id);
+      v_codeIDs := string_to_array(BTRIM(c_codeIDs, ', '), ',');
+
+      v_ArryLen := array_length(v_codeIDs, 1);
+      FOR y IN 1..v_ArryLen
+        LOOP
+          v_tax_code_id := v_codeIDs [ y];
+          v_txsmmryNm := gst.getGnrlRecNm('scm.scm_tax_codes', 'code_id', 'code_name', v_tax_code_id);
+          --v_dcntAMnt := scm.getSalesDocCodesAmnt(p_dscnt_code_id, p_entrdAmnt, 1);
+          v_codeAmnt := scm.getSalesDocCodesAmnt(v_tax_code_id, p_entrdAmnt - v_snglDscnt, 1);
+          v_lnSmmryLnID := accb.getRcvblsLnDetID('2Tax', v_tax_code_id, v_smmryID);
+          c_accnts := accb.getRcvblBalncnAccnt('2Tax', v_tax_code_id, -1, -1, p_docType, p_orgid);
+          --v_reslt_1 := ':c_accnts:' || c_accnts;
+          --v_lnSmmryLnID := 1 / 0;
+          v_accnts := string_to_array(BTRIM(c_accnts, '; '), ';');
+          v_funcCurrAmnt := v_codeAmnt * p_funcCurrRate;
+          v_accntCurrAmnt := v_codeAmnt * p_accntCurrRate;
+          v_txlineDesc := v_txsmmryNm || ' on ' || p_lineDesc || ' (' || p_entrdAmnt || ')';
+          v_tax_accid := org.get_accnt_id_frmaccnt(p_costngID, v_accnts [ 4]::INTEGER);
+          IF (v_lnSmmryLnID <= 0) THEN
+            v_lnSmmryLnID := nextval('accb.accb_rcvbl_amnt_smmrys_rcvbl_smmry_id_seq');
+            v_reslt_1 := accb.createRcvblsDocDet1(v_lnSmmryLnID, p_hdrID, '2Tax', v_txlineDesc, v_codeAmnt,
+                                                  p_entrdCurrID, v_tax_code_id, p_docType, '1', v_accnts [ 3],
+                                                  v_tax_accid, v_accnts [ 1],
+                                                  p_blncgAccntID, -1, p_vldyStatus, -1, p_funcCurrID, p_accntCurrID,
+                                                  p_funcCurrRate, p_accntCurrRate, v_funcCurrAmnt,
+                                                  v_accntCurrAmnt, v_smmryID, 1, v_codeAmnt, p_ref_doc_number,
+                                                  ',', -1, -1, -1, p_who_rn);
+            IF v_reslt_1 NOT LIKE 'SUCCESS:%'
+            THEN
+              RAISE EXCEPTION USING
+                ERRCODE = 'RHERR',
+                MESSAGE = v_reslt_1,
+                HINT = v_reslt_1;
+            END IF;
+          ELSE
+            v_reslt_1 := accb.updtRcvblsDocDet1(v_lnSmmryLnID, p_hdrID, '2Tax', v_txlineDesc, v_codeAmnt,
+                                                p_entrdCurrID, v_tax_code_id, p_docType, '1', v_accnts [ 3],
+                                                v_tax_accid, v_accnts [ 1], p_blncgAccntID, -1, p_vldyStatus,
+                                                -1, p_funcCurrID, p_accntCurrID, p_funcCurrRate, p_accntCurrRate,
+                                                v_funcCurrAmnt, v_accntCurrAmnt, v_smmryID, 1, v_codeAmnt,
+                                                p_ref_doc_number, ',', -1, -1, -1, p_who_rn);
+            IF v_reslt_1 NOT LIKE 'SUCCESS:%'
+            THEN
+              RAISE EXCEPTION USING
+                ERRCODE = 'RHERR',
+                MESSAGE = v_reslt_1,
+                HINT = v_reslt_1;
+            END IF;
+          END IF;
+          END LOOP;
+    ELSIF (p_tax_code_id > 0) THEN
+      v_tax_code_id := p_tax_code_id;
+      v_txsmmryNm := gst.getGnrlRecNm('scm.scm_tax_codes', 'code_id', 'code_name', v_tax_code_id);
+      --v_dcntAMnt := scm.getSalesDocCodesAmnt(p_dscnt_code_id, p_entrdAmnt, 1);
+      v_codeAmnt := scm.getSalesDocCodesAmnt(v_tax_code_id, p_entrdAmnt - v_snglDscnt, 1);
+      v_lnSmmryLnID := accb.getRcvblsLnDetID('2Tax', v_tax_code_id, v_smmryID);
+      c_accnts := accb.getRcvblBalncnAccnt('2Tax', v_tax_code_id, -1, -1, p_docType, p_orgid);
+      v_accnts := string_to_array(BTRIM(c_accnts, '; '), ';');
+      v_funcCurrAmnt := v_codeAmnt * p_funcCurrRate;
+      v_accntCurrAmnt := v_codeAmnt * p_accntCurrRate;
+      v_txlineDesc := v_txsmmryNm || ' on ' || p_lineDesc || ' (' || p_entrdAmnt || ')';
+      v_tax_accid := org.get_accnt_id_frmaccnt(p_costngID, v_accnts [ 4]::INTEGER);
+      IF (v_lnSmmryLnID <= 0) THEN
+        v_lnSmmryLnID := nextval('accb.accb_rcvbl_amnt_smmrys_rcvbl_smmry_id_seq');
+        v_reslt_1 := accb.createRcvblsDocDet1(v_lnSmmryLnID, p_hdrID, '2Tax', v_txlineDesc, v_codeAmnt,
+                                              p_entrdCurrID, v_tax_code_id, p_docType, '1', v_accnts [ 3],
+                                              v_tax_accid, v_accnts [ 1],
+                                              p_blncgAccntID, -1, p_vldyStatus, -1, p_funcCurrID, p_accntCurrID,
+                                              p_funcCurrRate, p_accntCurrRate, v_funcCurrAmnt,
+                                              v_accntCurrAmnt, v_smmryID, 1, v_codeAmnt, p_ref_doc_number,
+                                              ',', -1, -1, -1, p_who_rn);
+        IF v_reslt_1 NOT LIKE 'SUCCESS:%'
+        THEN
+          RAISE EXCEPTION USING
+            ERRCODE = 'RHERR',
+            MESSAGE = v_reslt_1,
+            HINT = v_reslt_1;
+        END IF;
+      ELSE
+        v_reslt_1 := accb.updtRcvblsDocDet1(v_lnSmmryLnID, p_hdrID, '2Tax', v_txlineDesc, v_codeAmnt,
+                                            p_entrdCurrID, v_tax_code_id, p_docType, '1', v_accnts [ 3],
+                                            v_tax_accid, v_accnts [ 1], p_blncgAccntID, -1, p_vldyStatus,
+                                            -1, p_funcCurrID, p_accntCurrID, p_funcCurrRate, p_accntCurrRate,
+                                            v_funcCurrAmnt, v_accntCurrAmnt, v_smmryID, 1, v_codeAmnt,
+                                            p_ref_doc_number, ',', -1, -1, -1, p_who_rn);
+        IF v_reslt_1 NOT LIKE 'SUCCESS:%'
+        THEN
+          RAISE EXCEPTION USING
+            ERRCODE = 'RHERR',
+            MESSAGE = v_reslt_1,
+            HINT = v_reslt_1;
+        END IF;
+      END IF;
+    END IF;
+    
+    IF (p_whtax_code_id > 0 AND scm.istaxaparent(p_whtax_code_id) = '1') THEN
+      c_codeIDs := gst.getGnrlRecNm('scm.scm_tax_codes', 'code_id', 'child_code_ids', p_whtax_code_id);
+      v_codeIDs := string_to_array(BTRIM(c_codeIDs, ', '), ',');
+      
+      v_ArryLen := array_length(v_codeIDs, 1);
+      FOR y IN 1..v_ArryLen
+        LOOP
+          v_tax_code_id := v_codeIDs [ y];
+          v_txsmmryNm := gst.getGnrlRecNm('scm.scm_tax_codes', 'code_id', 'code_name', v_tax_code_id);
+          --v_dcntAMnt := scm.getSalesDocCodesAmnt(p_dscnt_code_id, p_entrdAmnt, 1);
+          v_codeAmnt := scm.getSalesDocCodesAmnt(v_tax_code_id, p_entrdAmnt - v_snglDscnt, 1);
+          v_lnSmmryLnID := accb.getRcvblsLnDetID('2Tax', v_tax_code_id, v_smmryID);
+          c_accnts := accb.getRcvblBalncnAccnt('2Tax', v_tax_code_id, -1, -1, p_docType, p_orgid);
+          v_accnts := string_to_array(BTRIM(c_accnts, '; '), ';');
+          v_funcCurrAmnt := v_codeAmnt * p_funcCurrRate;
+          v_accntCurrAmnt := v_codeAmnt * p_accntCurrRate;
+          v_txlineDesc := v_txsmmryNm || ' on ' || p_lineDesc || ' (' || p_entrdAmnt || ')';
+          v_tax_accid := org.get_accnt_id_frmaccnt(p_costngID, v_accnts [ 4]::INTEGER);
+          IF (v_lnSmmryLnID <= 0) THEN
+            v_lnSmmryLnID := nextval('accb.accb_rcvbl_amnt_smmrys_rcvbl_smmry_id_seq');
+            v_reslt_1 := accb.createRcvblsDocDet1(v_lnSmmryLnID, p_hdrID, '2Tax', v_txlineDesc, v_codeAmnt,
+                                                  p_entrdCurrID, v_tax_code_id, p_docType, '1', v_accnts [ 3],
+                                                  v_tax_accid, v_accnts [ 1],
+                                                  p_blncgAccntID, -1, p_vldyStatus, -1, p_funcCurrID, p_accntCurrID,
+                                                  p_funcCurrRate, p_accntCurrRate, v_funcCurrAmnt,
+                                                  v_accntCurrAmnt, v_smmryID, 1, v_codeAmnt, p_ref_doc_number,
+                                                  ',', -1, -1, -1, p_who_rn);
+            IF v_reslt_1 NOT LIKE 'SUCCESS:%'
+            THEN
+              RAISE EXCEPTION USING
+                ERRCODE = 'RHERR',
+                MESSAGE = v_reslt_1,
+                HINT = v_reslt_1;
+            END IF;
+          ELSE
+            v_reslt_1 := accb.updtRcvblsDocDet1(v_lnSmmryLnID, p_hdrID, '2Tax', v_txlineDesc, v_codeAmnt,
+                                                p_entrdCurrID, v_tax_code_id, p_docType, '1', v_accnts [ 3],
+                                                v_tax_accid, v_accnts [ 1], p_blncgAccntID, -1, p_vldyStatus,
+                                                -1, p_funcCurrID, p_accntCurrID, p_funcCurrRate, p_accntCurrRate,
+                                                v_funcCurrAmnt, v_accntCurrAmnt, v_smmryID, 1, v_codeAmnt,
+                                                p_ref_doc_number, ',', -1, -1, -1, p_who_rn);
+            IF v_reslt_1 NOT LIKE 'SUCCESS:%'
+            THEN
+              RAISE EXCEPTION USING
+                ERRCODE = 'RHERR',
+                MESSAGE = v_reslt_1,
+                HINT = v_reslt_1;
+            END IF;
+          END IF;
+          END LOOP;
+    ELSIF (p_whtax_code_id > 0) THEN
+      v_tax_code_id := p_whtax_code_id;
+      v_txsmmryNm := gst.getGnrlRecNm('scm.scm_tax_codes', 'code_id', 'code_name', v_tax_code_id);
+      --v_dcntAMnt := scm.getSalesDocCodesAmnt(p_dscnt_code_id, p_entrdAmnt, 1);
+      v_codeAmnt := scm.getSalesDocCodesAmnt(v_tax_code_id, p_entrdAmnt - v_snglDscnt, 1);
+      v_lnSmmryLnID := accb.getRcvblsLnDetID('2Tax', v_tax_code_id, v_smmryID);
+      c_accnts := accb.getRcvblBalncnAccnt('2Tax', v_tax_code_id, -1, -1, p_docType, p_orgid);
+      v_accnts := string_to_array(BTRIM(c_accnts, '; '), ';');
+      v_funcCurrAmnt := v_codeAmnt * p_funcCurrRate;
+      v_accntCurrAmnt := v_codeAmnt * p_accntCurrRate;
+      v_txlineDesc := v_txsmmryNm || ' on ' || p_lineDesc || ' (' || p_entrdAmnt || ')';
+      v_tax_accid := org.get_accnt_id_frmaccnt(p_costngID, v_accnts [ 4]::INTEGER);
+      IF (v_lnSmmryLnID <= 0) THEN
+        v_lnSmmryLnID := nextval('accb.accb_rcvbl_amnt_smmrys_rcvbl_smmry_id_seq');
+        v_reslt_1 := accb.createRcvblsDocDet1(v_lnSmmryLnID, p_hdrID, '2Tax', v_txlineDesc, v_codeAmnt,
+                                              p_entrdCurrID, v_tax_code_id, p_docType, '1', v_accnts [ 3],
+                                              v_tax_accid, v_accnts [ 1],
+                                              p_blncgAccntID, -1, p_vldyStatus, -1, p_funcCurrID, p_accntCurrID,
+                                              p_funcCurrRate, p_accntCurrRate, v_funcCurrAmnt,
+                                              v_accntCurrAmnt, v_smmryID, 1, v_codeAmnt, p_ref_doc_number,
+                                              ',', -1, -1, -1, p_who_rn);
+        IF v_reslt_1 NOT LIKE 'SUCCESS:%'
+        THEN
+          RAISE EXCEPTION USING
+            ERRCODE = 'RHERR',
+            MESSAGE = v_reslt_1,
+            HINT = v_reslt_1;
+        END IF;
+      ELSE
+        v_reslt_1 := accb.updtRcvblsDocDet1(v_lnSmmryLnID, p_hdrID, '2Tax', v_txlineDesc, v_codeAmnt,
+                                            p_entrdCurrID, v_tax_code_id, p_docType, '1', v_accnts [ 3],
+                                            v_tax_accid, v_accnts [ 1], p_blncgAccntID, -1, p_vldyStatus,
+                                            -1, p_funcCurrID, p_accntCurrID, p_funcCurrRate, p_accntCurrRate,
+                                            v_funcCurrAmnt, v_accntCurrAmnt, v_smmryID, 1, v_codeAmnt,
+                                            p_ref_doc_number, ',', -1, -1, -1, p_who_rn);
+        IF v_reslt_1 NOT LIKE 'SUCCESS:%'
+        THEN
+          RAISE EXCEPTION USING
+            ERRCODE = 'RHERR',
+            MESSAGE = v_reslt_1,
+            HINT = v_reslt_1;
+        END IF;
+      END IF;
+    END IF;
+    
+  END IF;
+  RETURN v_reslt_1;
+  EXCEPTION
+  WHEN OTHERS
+    THEN
+      RETURN 'ERROR:' || SQLERRM || ' ' || v_reslt_1;
 END;
 $BODY$;
