@@ -954,7 +954,7 @@ BEGIN
           v_tax_code_id := v_codeIDs [ y];
           v_txsmmryNm := gst.getGnrlRecNm('scm.scm_tax_codes', 'code_id', 'code_name', v_tax_code_id);
           --v_dcntAMnt := scm.getSalesDocCodesAmnt(p_dscnt_code_id, p_entrdAmnt, 1);
-          v_codeAmnt := scm.getSalesDocCodesAmnt(v_tax_code_id, p_entrdAmnt - v_snglDscnt, 1);    
+          v_codeAmnt := v_codeAmnt + scm.getSalesDocCodesAmnt(v_tax_code_id, p_entrdAmnt - v_snglDscnt, 1);    
           END LOOP;
     ELSIF (p_tax_code_id > 0) THEN
       v_tax_code_id := p_tax_code_id;
@@ -963,7 +963,7 @@ BEGIN
       v_codeAmnt := scm.getSalesDocCodesAmnt(v_tax_code_id, p_entrdAmnt - v_snglDscnt, 1);
     END IF;
 
-	v_sllngPrc := v_codeAmnt +p_entrdAmnt;
+	v_sllngPrc := v_codeAmnt + p_entrdAmnt;
 
     IF (p_dscnt_code_id > 0 AND scm.istaxaparent(p_dscnt_code_id) = '1') THEN
       c_codeIDs := gst.getGnrlRecNm('scm.scm_tax_codes', 'code_id', 'child_code_ids', p_dscnt_code_id);
@@ -1531,5 +1531,427 @@ BEGIN
   WHEN OTHERS
     THEN
       RETURN 'ERROR:' || SQLERRM || ' v_msgs:' || v_msgs;
+END;
+$BODY$;
+
+CREATE OR REPLACE FUNCTION accb.createpyblsdocdet(
+	p_smmryid bigint,
+	p_hdrid bigint,
+	p_linetype character varying,
+	p_linedesc character varying,
+	p_entrdamnt numeric,
+	p_entrdcurrid integer,
+	p_codebhnd integer,
+	p_doctype character varying,
+	p_autocalc character varying,
+	p_incrdcrs1 character varying,
+	p_costngid integer,
+	p_incrdcrs2 character varying,
+	p_blncgaccntid integer,
+	p_prepaydochdrid bigint,
+	p_vldystatus character varying,
+	p_orgnllnid bigint,
+	p_funccurrid integer,
+	p_accntcurrid integer,
+	p_funccurrrate numeric,
+	p_accntcurrrate numeric,
+	p_funccurramnt numeric,
+	p_accntcurramnt numeric,
+	p_initial_amnt_line_id bigint,
+	p_ref_doc_number character varying,
+	p_slctd_amnt_brkdwns character varying,
+	p_tax_code_id integer,
+	p_whtax_code_id integer,
+	p_dscnt_code_id integer,
+	p_who_rn bigint)
+    RETURNS character varying
+    LANGUAGE 'plpgsql'
+    COST 100
+    VOLATILE PARALLEL UNSAFE
+AS $BODY$
+<< outerblock >>
+  DECLARE
+  v_reslt_1       TEXT                    := '';
+  v_smmryID       BIGINT                  := -1;
+  c_codeIDs       CHARACTER VARYING(4000) := '';
+  v_codeIDs       CHARACTER VARYING(4000)[];
+  v_ArryLen       INTEGER                 := 0;
+  v_tax_code_id   INTEGER                 := -1;
+  v_tax_accid     INTEGER                 := -1;
+  v_txsmmryNm     CHARACTER VARYING(200)  := '';
+  v_dcntAMnt      NUMERIC                 := 0;
+  v_codeAmnt      NUMERIC                 := 0;
+  v_lnSmmryLnID   BIGINT                  := -1;
+  c_accnts        CHARACTER VARYING(4000) := '';
+  v_accnts        CHARACTER VARYING(4000)[];
+  v_funcCurrAmnt  NUMERIC                 := 0;
+  v_accntCurrAmnt NUMERIC                 := 0;
+  v_txlineDesc    CHARACTER VARYING(300)  := '';
+  p_orgid         INTEGER                 := -1;
+  v_dscntAmnts     NUMERIC                := 0;
+  v_dscntAmnts1     NUMERIC                := 0;
+  v_snglDscnt      NUMERIC                := 0;
+  v_sllngPrc       NUMERIC                := 0;
+BEGIN
+  v_reslt_1 :=
+      accb.createPyblsDocDet1(p_smmryID, p_hdrID, p_lineType, p_lineDesc, p_entrdAmnt, p_entrdCurrID, p_codeBhnd,
+                              p_docType, p_autoCalc, p_incrDcrs1, p_costngID, p_incrDcrs2, p_blncgAccntID,
+                              p_prepayDocHdrID, p_vldyStatus, p_orgnlLnID, p_funcCurrID, p_accntCurrID, p_funcCurrRate,
+                              p_accntCurrRate, p_funcCurrAmnt, p_accntCurrAmnt, p_initial_amnt_line_id,
+                              p_ref_doc_number, p_slctd_amnt_brkdwns, p_tax_code_id, p_whtax_code_id, p_dscnt_code_id,
+                              p_who_rn);
+  IF v_reslt_1 NOT LIKE 'SUCCESS:%'
+  THEN
+    RAISE EXCEPTION USING
+      ERRCODE = 'RHERR',
+      MESSAGE = v_reslt_1,
+      HINT = v_reslt_1;
+  END IF;
+  IF p_initial_amnt_line_id <= 0 AND p_lineType = '1Initial Amount' THEN
+    p_orgid := gst.getGnrlRecNm('accb.accb_pybls_invc_hdr', 'pybls_invc_hdr_id', 'org_id', p_hdrID)::INTEGER;
+    v_smmryID := p_smmryID;
+	
+	v_snglDscnt :=0;
+	
+    
+    IF (p_tax_code_id > 0 AND scm.istaxaparent(p_tax_code_id) = '1') THEN
+      c_codeIDs := gst.getGnrlRecNm('scm.scm_tax_codes', 'code_id', 'child_code_ids', p_tax_code_id);
+      v_codeIDs := string_to_array(BTRIM(c_codeIDs, ', '), ',');
+      
+      v_ArryLen := array_length(v_codeIDs, 1);
+      FOR y IN 1..v_ArryLen
+        LOOP
+          v_tax_code_id := v_codeIDs [ y];
+          v_txsmmryNm := gst.getGnrlRecNm('scm.scm_tax_codes', 'code_id', 'code_name', v_tax_code_id);
+          --v_dcntAMnt := scm.getSalesDocCodesAmnt(p_dscnt_code_id, p_entrdAmnt, 1);
+          v_codeAmnt := v_codeAmnt + scm.getSalesDocCodesAmnt(v_tax_code_id, p_entrdAmnt - v_snglDscnt, 1);
+          END LOOP;
+    ELSIF (p_tax_code_id > 0) THEN
+      v_tax_code_id := p_tax_code_id;
+      v_txsmmryNm := gst.getGnrlRecNm('scm.scm_tax_codes', 'code_id', 'code_name', v_tax_code_id);
+      --v_dcntAMnt := scm.getSalesDocCodesAmnt(p_dscnt_code_id, p_entrdAmnt, 1);
+      v_codeAmnt := scm.getSalesDocCodesAmnt(v_tax_code_id, p_entrdAmnt - v_snglDscnt, 1);
+    END IF;
+
+	v_sllngPrc := v_codeAmnt +p_entrdAmnt;
+	
+    IF (p_dscnt_code_id > 0 AND scm.istaxaparent(p_dscnt_code_id) = '1') THEN
+      c_codeIDs := gst.getGnrlRecNm('scm.scm_tax_codes', 'code_id', 'child_code_ids', p_dscnt_code_id);
+      v_codeIDs := string_to_array(BTRIM(c_codeIDs, ', '), ',');
+      
+      v_ArryLen := array_length(v_codeIDs, 1);
+      FOR y IN 1..v_ArryLen
+        LOOP
+          v_tax_code_id := v_codeIDs [ y];
+          v_txsmmryNm := gst.getGnrlRecNm('scm.scm_tax_codes', 'code_id', 'code_name', v_tax_code_id);
+
+		  v_snglDscnt := scm.getDscntLessTax(p_tax_code_id, scm.getSalesDocCodesAmnt(v_tax_code_id, v_sllngPrc, 1));
+          v_dscntAmnts1 := scm.getDscntLessTax(p_tax_code_id, scm.getSalesDocCodesAmnt(v_tax_code_id, v_sllngPrc, 1));
+          v_dscntAmnts := v_dscntAmnts + v_dscntAmnts1;
+          
+		  v_codeAmnt := v_dscntAmnts;--scm.getSalesDocCodesAmnt(v_tax_code_id, p_entrdAmnt, 1);
+		  
+          v_lnSmmryLnID := accb.getPyblsLnDetID('3Discount', v_tax_code_id, v_smmryID);
+          c_accnts := accb.getPyblBalncnAccnt('3Discount', v_tax_code_id, -1, -1, p_docType, p_orgid);
+          v_accnts := string_to_array(BTRIM(c_accnts, '; '), ';');
+          v_funcCurrAmnt := v_codeAmnt * p_funcCurrRate;
+          v_accntCurrAmnt := v_codeAmnt * p_accntCurrRate;
+          v_txlineDesc := v_txsmmryNm || ' on ' || p_lineDesc || ' (' || p_entrdAmnt || ')';
+          v_tax_accid := org.get_accnt_id_frmaccnt(p_costngID, v_accnts [ 4]::INTEGER);
+          IF (v_lnSmmryLnID <= 0) THEN
+            v_lnSmmryLnID := nextval('accb.accb_pybls_amnt_smmrys_pybls_smmry_id_seq');
+            v_reslt_1 :=
+                accb.createPyblsDocDet1(v_lnSmmryLnID, p_hdrID, '3Discount', v_txlineDesc, v_codeAmnt, p_entrdCurrID,
+                                        v_tax_code_id,
+                                        p_docType, '1', v_accnts [ 3], v_tax_accid, v_accnts [ 1],
+                                        p_blncgAccntID,
+                                        -1, p_vldyStatus, -1, p_funcCurrID, p_accntCurrID, p_funcCurrRate,
+                                        p_accntCurrRate, v_funcCurrAmnt, v_accntCurrAmnt, v_smmryID,
+                                        p_ref_doc_number, ',', -1, -1, -1, p_who_rn);
+            IF v_reslt_1 NOT LIKE 'SUCCESS:%'
+            THEN
+              RAISE EXCEPTION USING
+                ERRCODE = 'RHERR',
+                MESSAGE = v_reslt_1,
+                HINT = v_reslt_1;
+            END IF;
+          ELSE
+            v_reslt_1 :=
+                accb.updtPyblsDocDet1(v_lnSmmryLnID, p_hdrID, '3Discount', v_txlineDesc, v_codeAmnt, p_entrdCurrID,
+                                      v_tax_code_id,
+                                      p_docType, '1', v_accnts [ 3], v_tax_accid, v_accnts [ 1],
+                                      p_blncgAccntID,
+                                      -1, p_vldyStatus, -1, p_funcCurrID, p_accntCurrID, p_funcCurrRate,
+                                      p_accntCurrRate, v_funcCurrAmnt, v_accntCurrAmnt, v_smmryID, p_ref_doc_number,
+                                      ',', -1, -1, -1, p_who_rn);
+            IF v_reslt_1 NOT LIKE 'SUCCESS:%'
+            THEN
+              RAISE EXCEPTION USING
+                ERRCODE = 'RHERR',
+                MESSAGE = v_reslt_1,
+                HINT = v_reslt_1;
+            END IF;
+          END IF;
+          END LOOP;
+    ELSIF (p_dscnt_code_id > 0) THEN
+      v_tax_code_id := p_dscnt_code_id;
+      v_txsmmryNm := gst.getGnrlRecNm('scm.scm_tax_codes', 'code_id', 'code_name', v_tax_code_id);
+
+	  v_snglDscnt := scm.getDscntLessTax(p_tax_code_id, scm.getSalesDocCodesAmnt(v_tax_code_id, v_sllngPrc, 1));
+      v_dscntAmnts1 := scm.getDscntLessTax(p_tax_code_id, scm.getSalesDocCodesAmnt(v_tax_code_id, v_sllngPrc, 1));
+      v_dscntAmnts := v_dscntAmnts + v_dscntAmnts1;
+          
+	  v_codeAmnt := v_dscntAmnts;--v_codeAmnt := scm.getSalesDocCodesAmnt(v_tax_code_id, p_entrdAmnt, 1);
+      
+	  v_lnSmmryLnID := accb.getPyblsLnDetID('3Discount', v_tax_code_id, v_smmryID);
+      c_accnts := accb.getPyblBalncnAccnt('3Discount', v_tax_code_id, -1, -1, p_docType, p_orgid);
+      v_accnts := string_to_array(BTRIM(c_accnts, '; '), ';');
+      v_funcCurrAmnt := v_codeAmnt * p_funcCurrRate;
+      v_accntCurrAmnt := v_codeAmnt * p_accntCurrRate;
+      v_txlineDesc := v_txsmmryNm || ' on ' || p_lineDesc || ' (' || p_entrdAmnt || ')';
+      v_tax_accid := org.get_accnt_id_frmaccnt(p_costngID, v_accnts [ 4]::INTEGER);
+      IF (v_lnSmmryLnID <= 0) THEN
+        v_lnSmmryLnID := nextval('accb.accb_pybls_amnt_smmrys_pybls_smmry_id_seq');
+        v_reslt_1 :=
+            accb.createPyblsDocDet1(v_lnSmmryLnID, p_hdrID, '3Discount', v_txlineDesc, v_codeAmnt, p_entrdCurrID,
+                                    v_tax_code_id,
+                                    p_docType, '1', v_accnts [ 3], v_tax_accid, v_accnts [ 1],
+                                    p_blncgAccntID,
+                                    -1, p_vldyStatus, -1, p_funcCurrID, p_accntCurrID, p_funcCurrRate,
+                                    p_accntCurrRate, v_funcCurrAmnt, v_accntCurrAmnt, v_smmryID,
+                                    p_ref_doc_number, ',', -1, -1, -1, p_who_rn);
+        IF v_reslt_1 NOT LIKE 'SUCCESS:%'
+        THEN
+          RAISE EXCEPTION USING
+            ERRCODE = 'RHERR',
+            MESSAGE = v_reslt_1,
+            HINT = v_reslt_1;
+        END IF;
+      ELSE
+        v_reslt_1 := accb.updtPyblsDocDet1(v_lnSmmryLnID, p_hdrID, '3Discount', v_txlineDesc, v_codeAmnt, p_entrdCurrID,
+                                           v_tax_code_id,
+                                           p_docType, '1', v_accnts [ 3], v_tax_accid, v_accnts [ 1],
+                                           p_blncgAccntID,
+                                           -1, p_vldyStatus, -1, p_funcCurrID, p_accntCurrID, p_funcCurrRate,
+                                           p_accntCurrRate, v_funcCurrAmnt, v_accntCurrAmnt, v_smmryID,
+                                           p_ref_doc_number,
+                                           ',', -1, -1, -1, p_who_rn);
+        IF v_reslt_1 NOT LIKE 'SUCCESS:%'
+        THEN
+          RAISE EXCEPTION USING
+            ERRCODE = 'RHERR',
+            MESSAGE = v_reslt_1,
+            HINT = v_reslt_1;
+        END IF;
+      END IF;
+    END IF;
+    IF (p_tax_code_id > 0 AND scm.istaxaparent(p_tax_code_id) = '1') THEN
+      c_codeIDs := gst.getGnrlRecNm('scm.scm_tax_codes', 'code_id', 'child_code_ids', p_tax_code_id);
+      v_codeIDs := string_to_array(BTRIM(c_codeIDs, ', '), ',');
+      
+      v_ArryLen := array_length(v_codeIDs, 1);
+      FOR y IN 1..v_ArryLen
+        LOOP
+          v_tax_code_id := v_codeIDs [ y];
+          v_txsmmryNm := gst.getGnrlRecNm('scm.scm_tax_codes', 'code_id', 'code_name', v_tax_code_id);
+          --v_dcntAMnt := scm.getSalesDocCodesAmnt(p_dscnt_code_id, p_entrdAmnt, 1);
+          v_codeAmnt := scm.getSalesDocCodesAmnt(v_tax_code_id, p_entrdAmnt - v_snglDscnt, 1);
+          v_lnSmmryLnID := accb.getPyblsLnDetID('2Tax', v_tax_code_id, v_smmryID);
+          c_accnts := accb.getPyblBalncnAccnt('2Tax', v_tax_code_id, -1, -1, p_docType, p_orgid);
+          --v_reslt_1 := ':c_accnts:' || c_accnts;
+          --v_lnSmmryLnID := 1 / 0;
+          v_accnts := string_to_array(BTRIM(c_accnts, '; '), ';');
+          v_funcCurrAmnt := v_codeAmnt * p_funcCurrRate;
+          v_accntCurrAmnt := v_codeAmnt * p_accntCurrRate;
+          v_txlineDesc := v_txsmmryNm || ' on ' || p_lineDesc || ' (' || p_entrdAmnt || ')';
+          v_tax_accid := org.get_accnt_id_frmaccnt(p_costngID, v_accnts [ 4]::INTEGER);
+          IF (v_lnSmmryLnID <= 0) THEN
+            v_lnSmmryLnID := nextval('accb.accb_pybls_amnt_smmrys_pybls_smmry_id_seq');
+            v_reslt_1 :=
+                accb.createPyblsDocDet1(v_lnSmmryLnID, p_hdrID, '2Tax', v_txlineDesc, v_codeAmnt, p_entrdCurrID,
+                                        v_tax_code_id,
+                                        p_docType, '1', v_accnts [ 3], v_tax_accid, v_accnts [ 1],
+                                        p_blncgAccntID,
+                                        -1, p_vldyStatus, -1, p_funcCurrID, p_accntCurrID, p_funcCurrRate,
+                                        p_accntCurrRate, v_funcCurrAmnt, v_accntCurrAmnt, v_smmryID,
+                                        p_ref_doc_number, ',', -1, -1, -1, p_who_rn);
+            IF v_reslt_1 NOT LIKE 'SUCCESS:%'
+            THEN
+              RAISE EXCEPTION USING
+                ERRCODE = 'RHERR',
+                MESSAGE = v_reslt_1,
+                HINT = v_reslt_1;
+            END IF;
+          ELSE
+            v_reslt_1 := accb.updtPyblsDocDet1(v_lnSmmryLnID, p_hdrID, '2Tax', v_txlineDesc, v_codeAmnt, p_entrdCurrID,
+                                               v_tax_code_id,
+                                               p_docType, '1', v_accnts [ 3], v_tax_accid, v_accnts [ 1],
+                                               p_blncgAccntID,
+                                               -1, p_vldyStatus, -1, p_funcCurrID, p_accntCurrID, p_funcCurrRate,
+                                               p_accntCurrRate, v_funcCurrAmnt, v_accntCurrAmnt, v_smmryID,
+                                               p_ref_doc_number,
+                                               ',', -1, -1, -1, p_who_rn);
+            IF v_reslt_1 NOT LIKE 'SUCCESS:%'
+            THEN
+              RAISE EXCEPTION USING
+                ERRCODE = 'RHERR',
+                MESSAGE = v_reslt_1,
+                HINT = v_reslt_1;
+            END IF;
+          END IF;
+          END LOOP;
+    ELSIF (p_tax_code_id > 0) THEN
+      v_tax_code_id := p_tax_code_id;
+      v_txsmmryNm := gst.getGnrlRecNm('scm.scm_tax_codes', 'code_id', 'code_name', v_tax_code_id);
+      --v_dcntAMnt := scm.getSalesDocCodesAmnt(p_dscnt_code_id, p_entrdAmnt, 1);
+      v_codeAmnt := scm.getSalesDocCodesAmnt(v_tax_code_id, p_entrdAmnt - v_snglDscnt, 1);
+      v_lnSmmryLnID := accb.getPyblsLnDetID('2Tax', v_tax_code_id, v_smmryID);
+      c_accnts := accb.getPyblBalncnAccnt('2Tax', v_tax_code_id, -1, -1, p_docType, p_orgid);
+      v_accnts := string_to_array(BTRIM(c_accnts, '; '), ';');
+      v_funcCurrAmnt := v_codeAmnt * p_funcCurrRate;
+      v_accntCurrAmnt := v_codeAmnt * p_accntCurrRate;
+      v_txlineDesc := v_txsmmryNm || ' on ' || p_lineDesc || ' (' || p_entrdAmnt || ')';
+      v_tax_accid := org.get_accnt_id_frmaccnt(p_costngID, v_accnts [ 4]::INTEGER);
+      IF (v_lnSmmryLnID <= 0) THEN
+        v_lnSmmryLnID := nextval('accb.accb_pybls_amnt_smmrys_pybls_smmry_id_seq');
+        v_reslt_1 := accb.createPyblsDocDet1(v_lnSmmryLnID, p_hdrID, '2Tax', v_txlineDesc, v_codeAmnt, p_entrdCurrID,
+                                             v_tax_code_id,
+                                             p_docType, '1', v_accnts [ 3], v_tax_accid, v_accnts [ 1],
+                                             p_blncgAccntID,
+                                             -1, p_vldyStatus, -1, p_funcCurrID, p_accntCurrID, p_funcCurrRate,
+                                             p_accntCurrRate, v_funcCurrAmnt, v_accntCurrAmnt, v_smmryID,
+                                             p_ref_doc_number, ',', -1, -1, -1, p_who_rn);
+        IF v_reslt_1 NOT LIKE 'SUCCESS:%'
+        THEN
+          RAISE EXCEPTION USING
+            ERRCODE = 'RHERR',
+            MESSAGE = v_reslt_1,
+            HINT = v_reslt_1;
+        END IF;
+      ELSE
+        v_reslt_1 := accb.updtPyblsDocDet1(v_lnSmmryLnID, p_hdrID, '2Tax', v_txlineDesc, v_codeAmnt, p_entrdCurrID,
+                                           v_tax_code_id,
+                                           p_docType, '1', v_accnts [ 3], v_tax_accid, v_accnts [ 1],
+                                           p_blncgAccntID,
+                                           -1, p_vldyStatus, -1, p_funcCurrID, p_accntCurrID, p_funcCurrRate,
+                                           p_accntCurrRate, v_funcCurrAmnt, v_accntCurrAmnt, v_smmryID,
+                                           p_ref_doc_number,
+                                           ',', -1, -1, -1, p_who_rn);
+        IF v_reslt_1 NOT LIKE 'SUCCESS:%'
+        THEN
+          RAISE EXCEPTION USING
+            ERRCODE = 'RHERR',
+            MESSAGE = v_reslt_1,
+            HINT = v_reslt_1;
+        END IF;
+      END IF;
+    END IF;
+    
+    IF (p_whtax_code_id > 0 AND scm.istaxaparent(p_whtax_code_id) = '1') THEN
+      c_codeIDs := gst.getGnrlRecNm('scm.scm_tax_codes', 'code_id', 'child_code_ids', p_whtax_code_id);
+      v_codeIDs := string_to_array(BTRIM(c_codeIDs, ', '), ',');
+      
+      v_ArryLen := array_length(v_codeIDs, 1);
+      FOR y IN 1..v_ArryLen
+        LOOP
+          v_tax_code_id := v_codeIDs [ y];
+          v_txsmmryNm := gst.getGnrlRecNm('scm.scm_tax_codes', 'code_id', 'code_name', v_tax_code_id);
+          --v_dcntAMnt := scm.getSalesDocCodesAmnt(p_dscnt_code_id, p_entrdAmnt, 1);
+          v_codeAmnt := scm.getSalesDocCodesAmnt(v_tax_code_id, p_entrdAmnt - v_snglDscnt, 1);
+          v_lnSmmryLnID := accb.getPyblsLnDetID('2Tax', v_tax_code_id, v_smmryID);
+          c_accnts := accb.getPyblBalncnAccnt('2Tax', v_tax_code_id, -1, -1, p_docType, p_orgid);
+          v_accnts := string_to_array(BTRIM(c_accnts, '; '), ';');
+          v_funcCurrAmnt := v_codeAmnt * p_funcCurrRate;
+          v_accntCurrAmnt := v_codeAmnt * p_accntCurrRate;
+          v_txlineDesc := v_txsmmryNm || ' on ' || p_lineDesc || ' (' || p_entrdAmnt || ')';
+          v_tax_accid := org.get_accnt_id_frmaccnt(p_costngID, v_accnts [ 4]::INTEGER);
+          IF (v_lnSmmryLnID <= 0) THEN
+            v_lnSmmryLnID := nextval('accb.accb_pybls_amnt_smmrys_pybls_smmry_id_seq');
+            v_reslt_1 :=
+                accb.createPyblsDocDet1(v_lnSmmryLnID, p_hdrID, '2Tax', v_txlineDesc, v_codeAmnt, p_entrdCurrID,
+                                        v_tax_code_id,
+                                        p_docType, '1', v_accnts [ 3], v_tax_accid, v_accnts [ 1],
+                                        p_blncgAccntID,
+                                        -1, p_vldyStatus, -1, p_funcCurrID, p_accntCurrID, p_funcCurrRate,
+                                        p_accntCurrRate, v_funcCurrAmnt, v_accntCurrAmnt, v_smmryID,
+                                        p_ref_doc_number, ',', -1, -1, -1, p_who_rn);
+            IF v_reslt_1 NOT LIKE 'SUCCESS:%'
+            THEN
+              RAISE EXCEPTION USING
+                ERRCODE = 'RHERR',
+                MESSAGE = v_reslt_1,
+                HINT = v_reslt_1;
+            END IF;
+          ELSE
+            v_reslt_1 := accb.updtPyblsDocDet1(v_lnSmmryLnID, p_hdrID, '2Tax', v_txlineDesc, v_codeAmnt, p_entrdCurrID,
+                                               v_tax_code_id,
+                                               p_docType, '1', v_accnts [ 3], v_tax_accid, v_accnts [ 1],
+                                               p_blncgAccntID,
+                                               -1, p_vldyStatus, -1, p_funcCurrID, p_accntCurrID, p_funcCurrRate,
+                                               p_accntCurrRate, v_funcCurrAmnt, v_accntCurrAmnt, v_smmryID,
+                                               p_ref_doc_number,
+                                               ',', -1, -1, -1, p_who_rn);
+            IF v_reslt_1 NOT LIKE 'SUCCESS:%'
+            THEN
+              RAISE EXCEPTION USING
+                ERRCODE = 'RHERR',
+                MESSAGE = v_reslt_1,
+                HINT = v_reslt_1;
+            END IF;
+          END IF;
+          END LOOP;
+    ELSIF (p_whtax_code_id > 0) THEN
+      v_tax_code_id := p_whtax_code_id;
+      v_txsmmryNm := gst.getGnrlRecNm('scm.scm_tax_codes', 'code_id', 'code_name', v_tax_code_id);
+      --v_dcntAMnt := scm.getSalesDocCodesAmnt(p_dscnt_code_id, p_entrdAmnt, 1);
+      v_codeAmnt := scm.getSalesDocCodesAmnt(v_tax_code_id, p_entrdAmnt - v_snglDscnt, 1);
+      v_lnSmmryLnID := accb.getPyblsLnDetID('2Tax', v_tax_code_id, v_smmryID);
+      c_accnts := accb.getPyblBalncnAccnt('2Tax', v_tax_code_id, -1, -1, p_docType, p_orgid);
+      v_accnts := string_to_array(BTRIM(c_accnts, '; '), ';');
+      v_funcCurrAmnt := v_codeAmnt * p_funcCurrRate;
+      v_accntCurrAmnt := v_codeAmnt * p_accntCurrRate;
+      v_txlineDesc := v_txsmmryNm || ' on ' || p_lineDesc || ' (' || p_entrdAmnt || ')';
+      v_tax_accid := org.get_accnt_id_frmaccnt(p_costngID, v_accnts [ 4]::INTEGER);
+      IF (v_lnSmmryLnID <= 0) THEN
+        v_lnSmmryLnID := nextval('accb.accb_pybls_amnt_smmrys_pybls_smmry_id_seq');
+        v_reslt_1 := accb.createPyblsDocDet1(v_lnSmmryLnID, p_hdrID, '2Tax', v_txlineDesc, v_codeAmnt, p_entrdCurrID,
+                                             v_tax_code_id,
+                                             p_docType, '1', v_accnts [ 3], v_tax_accid, v_accnts [ 1],
+                                             p_blncgAccntID,
+                                             -1, p_vldyStatus, -1, p_funcCurrID, p_accntCurrID, p_funcCurrRate,
+                                             p_accntCurrRate, v_funcCurrAmnt, v_accntCurrAmnt, v_smmryID,
+                                             p_ref_doc_number, ',', -1, -1, -1, p_who_rn);
+        IF v_reslt_1 NOT LIKE 'SUCCESS:%'
+        THEN
+          RAISE EXCEPTION USING
+            ERRCODE = 'RHERR',
+            MESSAGE = v_reslt_1,
+            HINT = v_reslt_1;
+        END IF;
+      ELSE
+        v_reslt_1 := accb.updtPyblsDocDet1(v_lnSmmryLnID, p_hdrID, '2Tax', v_txlineDesc, v_codeAmnt, p_entrdCurrID,
+                                           v_tax_code_id,
+                                           p_docType, '1', v_accnts [ 3], v_tax_accid, v_accnts [ 1],
+                                           p_blncgAccntID,
+                                           -1, p_vldyStatus, -1, p_funcCurrID, p_accntCurrID, p_funcCurrRate,
+                                           p_accntCurrRate, v_funcCurrAmnt, v_accntCurrAmnt, v_smmryID,
+                                           p_ref_doc_number,
+                                           ',', -1, -1, -1, p_who_rn);
+        IF v_reslt_1 NOT LIKE 'SUCCESS:%'
+        THEN
+          RAISE EXCEPTION USING
+            ERRCODE = 'RHERR',
+            MESSAGE = v_reslt_1,
+            HINT = v_reslt_1;
+        END IF;
+      END IF;
+    END IF;    
+  END IF;
+  
+  RETURN v_reslt_1;
+  EXCEPTION
+  WHEN OTHERS
+    THEN
+      RETURN 'ERROR:createPyblsDocDet' || SQLERRM;
 END;
 $BODY$;
