@@ -976,7 +976,7 @@ BEGIN
           v_txsmmryNm := gst.getGnrlRecNm('scm.scm_tax_codes', 'code_id', 'code_name', v_tax_code_id);
 
 		  v_snglDscnt := scm.getDscntLessTax(p_tax_code_id, scm.getSalesDocCodesAmnt(v_tax_code_id, v_sllngPrc, 1));
-          v_dscntAmnts1 := scm.getDscntLessTax(p_tax_code_id, scm.getSalesDocCodesAmnt(v_tax_code_id, v_sllngPrc, p_line_qty));
+          v_dscntAmnts1 := scm.getDscntLessTax(p_tax_code_id, scm.getSalesDocCodesAmnt(v_tax_code_id, v_sllngPrc, 1));
           v_dscntAmnts := v_dscntAmnts + v_dscntAmnts1;
           
 		  v_codeAmnt := v_dscntAmnts;--scm.getSalesDocCodesAmnt(v_tax_code_id, p_entrdAmnt, 1);
@@ -1024,7 +1024,7 @@ BEGIN
       v_txsmmryNm := gst.getGnrlRecNm('scm.scm_tax_codes', 'code_id', 'code_name', v_tax_code_id);
 	  
 		  v_snglDscnt := scm.getDscntLessTax(p_tax_code_id, scm.getSalesDocCodesAmnt(v_tax_code_id, v_sllngPrc, 1));
-          v_dscntAmnts1 := scm.getDscntLessTax(p_tax_code_id, scm.getSalesDocCodesAmnt(v_tax_code_id, v_sllngPrc, p_line_qty));
+          v_dscntAmnts1 := scm.getDscntLessTax(p_tax_code_id, scm.getSalesDocCodesAmnt(v_tax_code_id, v_sllngPrc, 1));
           v_dscntAmnts := v_dscntAmnts + v_dscntAmnts1;
 
       v_codeAmnt := v_dscntAmnts;--scm.getSalesDocCodesAmnt(v_tax_code_id, p_entrdAmnt, 1);
@@ -1035,6 +1035,7 @@ BEGIN
       v_accntCurrAmnt := v_codeAmnt * p_accntCurrRate;
       v_txlineDesc := v_txsmmryNm || ' on ' || p_lineDesc || ' (' || p_entrdAmnt || ')';
       v_tax_accid := org.get_accnt_id_frmaccnt(p_costngID, v_accnts [ 4]::INTEGER);
+
       IF (v_lnSmmryLnID <= 0) THEN
         v_lnSmmryLnID := nextval('accb.accb_rcvbl_amnt_smmrys_rcvbl_smmry_id_seq');
         v_reslt_1 := accb.createRcvblsDocDet1(v_lnSmmryLnID, p_hdrID, '3Discount', v_txlineDesc, v_codeAmnt,
@@ -1266,5 +1267,269 @@ BEGIN
   WHEN OTHERS
     THEN
       RETURN 'ERROR:' || SQLERRM || ' ' || v_reslt_1;
+END;
+$BODY$;
+
+
+CREATE OR REPLACE FUNCTION accb.recalcrcvblssmmrys(
+	p_srcdocid bigint,
+	p_srcdoctype character varying,
+	p_who_rn bigint)
+    RETURNS character varying
+    LANGUAGE 'plpgsql'
+    COST 100
+    VOLATILE PARALLEL UNSAFE
+AS $BODY$
+<< outerblock >>
+  DECLARE
+  v_msgs          TEXT                   := '';
+  v_grndAmnt      NUMERIC                := 0;
+  v_grndAmnt2     NUMERIC                := 0;
+  v_diff          NUMERIC                := 0;
+  v_pymntsAmnt    NUMERIC                := 0;
+  v_outstndngAmnt NUMERIC                := 0;
+  v_smmryNm       CHARACTER VARYING(100) := '';
+  v_smmryID       BIGINT                 := -1;
+  v_entrdCurrID   INTEGER                := -1;
+  v_curlnID       BIGINT                 := -1;
+  v_reslt_1       TEXT                   := '';
+  vRD RECORD;
+  v_CntID         BIGINT                 := 0;
+BEGIN
+  v_grndAmnt := accb.getRcvblsDocGrndAmnt(p_srcDocID);
+  v_grndAmnt2 := accb.getRcvblsDocGrndAmnt2(p_srcDocID);
+  v_diff := round(v_grndAmnt - v_grndAmnt2, 2);
+  v_smmryNm := 'Grand Total';
+  v_smmryID := accb.getRcvblsSmmryItmID('6Grand Total', -1, p_srcDocID, p_srcDocType, v_smmryNm);
+  v_entrdCurrID := gst.getGnrlRecNm('accb.accb_rcvbls_invc_hdr', 'rcvbls_invc_hdr_id', 'invc_curr_id',
+                                    p_srcDocID) :: INTEGER;
+  IF (v_smmryID <= 0)
+  THEN
+    v_curlnID := nextval('accb.accb_rcvbl_amnt_smmrys_rcvbl_smmry_id_seq');
+    v_reslt_1 := accb.createRcvblsDocDet(v_curlnID, p_srcDocID, '6Grand Total',
+                                         v_smmryNm, v_grndAmnt, v_entrdCurrID,
+                                         -1, p_srcDocType, '1', 'Increase',
+                                         -1, 'Increase', -1, -1, 'VALID', -1, -1,
+                                         -1, 0, 0, 0, 0, -1, 1, 0, '', ',', -1, -1, -1, p_who_rn);
+  ELSE
+    v_reslt_1 := accb.updtRcvblsDocDet(v_smmryID, p_srcDocID, '6Grand Total',
+                                       v_smmryNm, v_grndAmnt, v_entrdCurrID,
+                                       -1, p_srcDocType, '1', 'Increase',
+                                       -1, 'Increase', -1, -1, 'VALID', -1, -1,
+                                       -1, 0, 0, 0, 0, -1, 1, 0, '', ',', -1, -1, -1, p_who_rn);
+  END IF;
+  
+  v_smmryNm := 'Total Payments Made';
+  v_smmryID := accb.getRcvblsSmmryItmID('7Total Payments Made', -1,
+                                        p_srcDocID, p_srcDocType, v_smmryNm);
+  v_pymntsAmnt := accb.getDocsTtlPymnts(p_srcDocID, p_srcDocType);
+  
+  IF (v_smmryID <= 0)
+  THEN
+    v_curlnID := nextval('accb.accb_rcvbl_amnt_smmrys_rcvbl_smmry_id_seq');
+    v_reslt_1 := accb.createRcvblsDocDet(v_curlnID, p_srcDocID, '7Total Payments Made',
+                                         v_smmryNm, v_pymntsAmnt, v_entrdCurrID,
+                                         -1, p_srcDocType, '1', 'Increase',
+                                         -1, 'Increase', -1, -1, 'VALID', -1, -1,
+                                         -1, 0, 0, 0, 0, -1, 1, 0, '', ',', -1, -1, -1, p_who_rn);
+  ELSE
+    v_reslt_1 := accb.updtRcvblsDocDet(v_smmryID, p_srcDocID, '7Total Payments Made',
+                                       v_smmryNm, v_pymntsAmnt, v_entrdCurrID,
+                                       -1, p_srcDocType, '1', 'Increase',
+                                       -1, 'Increase', -1, -1, 'VALID', -1, -1,
+                                       -1, 0, 0, 0, 0, -1, 1, 0, '', ',', -1, -1, -1, p_who_rn);
+  END IF;
+  
+  v_smmryNm := 'Outstanding Balance';
+  v_smmryID := accb.getRcvblsSmmryItmID('8Outstanding Balance', -1, p_srcDocID, p_srcDocType, v_smmryNm);
+  v_outstndngAmnt := v_grndAmnt - v_pymntsAmnt;
+  IF (v_smmryID <= 0)
+  THEN
+    v_curlnID := nextval('accb.accb_rcvbl_amnt_smmrys_rcvbl_smmry_id_seq');
+    v_reslt_1 := accb.createRcvblsDocDet(v_curlnID, p_srcDocID, '8Outstanding Balance',
+                                         v_smmryNm, v_outstndngAmnt, v_entrdCurrID,
+                                         -1, p_srcDocType, '1', 'Increase',
+                                         -1, 'Increase', -1, -1, 'VALID', -1, -1,
+                                         -1, 0, 0, 0, 0, -1, 1, 0, '', ',', -1, -1, -1, p_who_rn);
+  ELSE
+    v_reslt_1 := accb.updtRcvblsDocDet(v_smmryID, p_srcDocID, '8Outstanding Balance',
+                                       v_smmryNm, v_outstndngAmnt, v_entrdCurrID,
+                                       -1, p_srcDocType, '1', 'Increase',
+                                       -1, 'Increase', -1, -1, 'VALID', -1, -1,
+                                       -1, 0, 0, 0, 0, -1, 1, 0, '', ',', -1, -1, -1, p_who_rn);
+  END IF;
+  --SELECT z.rcvbl_smmry_id INTO v_smmryID FROM accb.accb_rcvbl_amnt_smmrys z WHERE z.rcvbl_smmry_type = '1Initial Amount' ORDER BY z.rcvbl_smmry_id ASC LIMIT 1 OFFSET 0;
+  --v_msgs := 'v_diff:' || v_diff || ':v_smmryID:' || v_smmryID;
+  --v_smmryID := 1 / 0;
+  /*Loop through all Taxes and spread differences to balance if need be.*/
+  IF v_diff != 0 THEN
+	SELECT count(z.rcvbl_smmry_id) 
+				INTO v_CntID
+		FROM accb.accb_rcvbl_amnt_smmrys z
+		WHERE z.rcvbl_smmry_type = '2Tax'
+			AND z.src_rcvbl_hdr_id = p_srcDocID;
+
+		IF COALESCE(v_CntID, 0) != 0 THEN
+			v_diff := v_diff/COALESCE(v_CntID, 0.00);
+			FOR vRD IN (
+				SELECT z.rcvbl_smmry_id 
+					FROM accb.accb_rcvbl_amnt_smmrys z
+				WHERE z.rcvbl_smmry_type = '2Tax'
+					AND z.src_rcvbl_hdr_id = p_srcDocID
+					)
+				LOOP
+					UPDATE accb.accb_rcvbl_amnt_smmrys
+					SET rcvbl_smmry_amnt=rcvbl_smmry_amnt + v_diff,
+						func_curr_amount=(rcvbl_smmry_amnt + v_diff) * func_curr_rate,
+						accnt_curr_amnt=(rcvbl_smmry_amnt + v_diff) * accnt_curr_rate,
+						unit_price=(round(rcvbl_smmry_amnt, 2) + v_diff) / (CASE WHEN line_qty = 0 THEN 1 ELSE line_qty END)
+					WHERE src_rcvbl_hdr_id = p_srcDocID
+						AND rcvbl_smmry_id = vRD.rcvbl_smmry_id;				
+				END LOOP;
+		END IF;
+  END IF;
+  
+				UPDATE accb.accb_rcvbl_amnt_smmrys
+				SET rcvbl_smmry_amnt=round(rcvbl_smmry_amnt, 2),
+					func_curr_amount=round(rcvbl_smmry_amnt, 2) * func_curr_rate,
+					accnt_curr_amnt=round(rcvbl_smmry_amnt, 2) * accnt_curr_rate,
+					unit_price=round(rcvbl_smmry_amnt, 2) / (CASE WHEN line_qty = 0 THEN 1 ELSE line_qty END)
+				WHERE src_rcvbl_hdr_id = p_srcDocID;
+  RETURN 'SUCCESS:';
+  EXCEPTION
+  WHEN OTHERS
+    THEN
+      RETURN 'ERROR:' || SQLERRM || ' v_msgs:' || v_msgs;
+END;
+$BODY$;
+
+CREATE OR REPLACE FUNCTION accb.recalcpyblssmmrys(
+	p_srcdocid bigint,
+	p_srcdoctype character varying,
+	p_who_rn bigint)
+    RETURNS character varying
+    LANGUAGE 'plpgsql'
+    COST 100
+    VOLATILE PARALLEL UNSAFE
+AS $BODY$
+<< outerblock >>
+  DECLARE
+  v_diff          NUMERIC                := 0;
+  v_grndAmnt      NUMERIC                := 0;
+  v_grndAmnt2     NUMERIC                := 0;
+  v_pymntsAmnt    NUMERIC                := 0;
+  v_outstndngAmnt NUMERIC                := 0;
+  v_smmryNm       CHARACTER VARYING(100) := '';
+  v_smmryID       BIGINT                 := -1;
+  v_entrdCurrID   INTEGER                := -1;
+  v_curlnID       BIGINT                 := -1;
+  v_reslt_1       TEXT                   := '';
+  v_msgs          TEXT                   := '';
+  vRD RECORD;
+  v_CntID         BIGINT                 := 0;
+BEGIN
+  v_grndAmnt := accb.getPyblsDocGrndAmnt(p_srcDocID);
+  v_grndAmnt2 := accb.getPyblsDocGrndAmnt2(p_srcDocID);
+  v_diff := round(v_grndAmnt - v_grndAmnt2, 2);
+  v_smmryNm := 'Grand Total';
+  v_smmryID := accb.getPyblsSmmryItmID('6Grand Total', -1, p_srcDocID, p_srcDocType, v_smmryNm);
+  v_entrdCurrID := gst.getGnrlRecNm('accb.accb_pybls_invc_hdr', 'pybls_invc_hdr_id', 'invc_curr_id',
+                                    p_srcDocID) :: INTEGER;
+  IF (v_smmryID <= 0)
+  THEN
+    v_curlnID := nextval('accb.accb_pybls_amnt_smmrys_pybls_smmry_id_seq');
+    v_reslt_1 := accb.createPyblsDocDet(v_curlnID, p_srcDocID, '6Grand Total',
+                                        v_smmryNm, v_grndAmnt, v_entrdCurrID,
+                                        -1, p_srcDocType, '1', 'Increase',
+                                        -1, 'Increase', -1, -1, 'VALID', -1, -1,
+                                        -1, 0, 0, 0, 0, -1, '', ',', -1, -1, -1, p_who_rn);
+  ELSE
+    v_reslt_1 := accb.updtPyblsDocDet(v_smmryID, p_srcDocID, '6Grand Total',
+                                      v_smmryNm, v_grndAmnt, v_entrdCurrID,
+                                      -1, p_srcDocType, '1', 'Increase',
+                                      -1, 'Increase', -1, -1, 'VALID', -1, -1,
+                                      -1, 0, 0, 0, 0, -1,
+                                      '', ',', -1, -1, -1, p_who_rn);
+    --v_smmryID := 1 / 0;
+  END IF;
+  
+  v_smmryNm := 'Total Payments Made';
+  v_smmryID := accb.getPyblsSmmryItmID('7Total Payments Made', -1,
+                                       p_srcDocID, p_srcDocType, v_smmryNm);
+  v_pymntsAmnt := accb.getDocsTtlPymnts(p_srcDocID, p_srcDocType);
+  
+  IF (v_smmryID <= 0)
+  THEN
+    v_curlnID := nextval('accb.accb_pybls_amnt_smmrys_pybls_smmry_id_seq');
+    v_reslt_1 := accb.createPyblsDocDet(v_curlnID, p_srcDocID, '7Total Payments Made',
+                                        v_smmryNm, v_pymntsAmnt, v_entrdCurrID,
+                                        -1, p_srcDocType, '1', 'Increase',
+                                        -1, 'Increase', -1, -1, 'VALID', -1, -1,
+                                        -1, 0, 0, 0, 0, -1, '', ',', -1, -1, -1, p_who_rn);
+  ELSE
+    v_reslt_1 := accb.updtPyblsDocDet(v_smmryID, p_srcDocID, '7Total Payments Made',
+                                      v_smmryNm, v_pymntsAmnt, v_entrdCurrID,
+                                      -1, p_srcDocType, '1', 'Increase',
+                                      -1, 'Increase', -1, -1, 'VALID', -1, -1,
+                                      -1, 0, 0, 0, 0, -1, '', ',', -1, -1, -1, p_who_rn);
+  END IF;
+  v_smmryNm := 'Outstanding Balance';
+  v_smmryID := accb.getPyblsSmmryItmID('8Outstanding Balance', -1,
+                                       p_srcDocID, p_srcDocType, v_smmryNm);
+  v_outstndngAmnt := v_grndAmnt - v_pymntsAmnt;
+  IF (v_smmryID <= 0)
+  THEN
+    v_curlnID := nextval('accb.accb_pybls_amnt_smmrys_pybls_smmry_id_seq');
+    v_reslt_1 := accb.createPyblsDocDet(v_curlnID, p_srcDocID, '8Outstanding Balance',
+                                        v_smmryNm, v_outstndngAmnt, v_entrdCurrID,
+                                        -1, p_srcDocType, '1', 'Increase',
+                                        -1, 'Increase', -1, -1, 'VALID', -1, -1,
+                                        -1, 0, 0, 0, 0, -1, '', ',', -1, -1, -1, p_who_rn);
+  ELSE
+    v_reslt_1 := accb.updtPyblsDocDet(v_smmryID, p_srcDocID, '8Outstanding Balance',
+                                      v_smmryNm, v_outstndngAmnt, v_entrdCurrID,
+                                      -1, p_srcDocType, '1', 'Increase',
+                                      -1, 'Increase', -1, -1, 'VALID', -1, -1,
+                                      -1, 0, 0, 0, 0, -1, '', ',', -1, -1, -1, p_who_rn);
+  END IF;
+  
+  /*Loop through all Taxes and spread differences to balance if need be.*/
+  IF v_diff != 0 THEN
+	SELECT count(z.pybls_smmry_id) 
+				INTO v_CntID
+		FROM accb.accb_pybls_amnt_smmrys z
+		WHERE z.pybls_smmry_type = '2Tax'
+			AND z.src_pybls_hdr_id = p_srcDocID;
+
+		IF COALESCE(v_CntID, 0) != 0 THEN
+
+			v_diff := v_diff/COALESCE(v_CntID, 0.00);
+		FOR vRD IN (
+			SELECT z.pybls_smmry_id 
+				FROM accb.accb_pybls_amnt_smmrys z
+			WHERE z.pybls_smmry_type = '2Tax'
+				AND z.src_pybls_hdr_id = p_srcDocID
+				)
+			LOOP
+				UPDATE accb.accb_pybls_amnt_smmrys
+				SET pybls_smmry_amnt=pybls_smmry_amnt + v_diff,
+					func_curr_amount=(pybls_smmry_amnt + v_diff) * func_curr_rate,
+					accnt_curr_amnt=(pybls_smmry_amnt + v_diff) * accnt_curr_rate
+				WHERE src_pybls_hdr_id = p_srcDocID
+					AND pybls_smmry_id = vRD.pybls_smmry_id;				
+			END LOOP;
+		END IF;
+  END IF;
+  
+				UPDATE accb.accb_pybls_amnt_smmrys
+				SET pybls_smmry_amnt=round(pybls_smmry_amnt, 2),
+					func_curr_amount=round(pybls_smmry_amnt, 2) * func_curr_rate,
+					accnt_curr_amnt=round(pybls_smmry_amnt, 2) * accnt_curr_rate
+				WHERE src_pybls_hdr_id = p_srcDocID;
+  RETURN 'SUCCESS:';
+  EXCEPTION
+  WHEN OTHERS
+    THEN
+      RETURN 'ERROR:' || SQLERRM || ' v_msgs:' || v_msgs;
 END;
 $BODY$;
