@@ -39,7 +39,7 @@ BEGIN
 	WHERE accnt_id= p_accntID AND org_id=p_org_id;
 
 	IF coalesce(v_cnt, - 1) <= 0 THEN
-		RETURN 'ERROR:Account Number must exist in the Current Organization!';
+		RETURN 'ERROR:Account ID:'|| p_accntID || ' A/c No.:' || accb.get_accnt_num(p_accntID) || '.' || accb.get_accnt_name(p_accntID) || ' must exist in the Current Organization!';
 	END IF;
 	trnsDte := to_timestamp(p_trnsdate, 'DD-Mon-YYYY HH24:MI:SS');
 	dte1 := to_timestamp(accb.getLtstPrdStrtDate (), 'DD-Mon-YYYY HH24:MI:SS');

@@ -2326,7 +2326,6 @@ BEGIN
     END IF;
 
     --Balancing Leg
-
     v_accntCurrID := gst.getGnrlRecNm('accb.accb_chart_of_accnts', 'accnt_id', 'crncy_id', v_balcngAccntID) :: INTEGER;
     v_funcCurrRate := accb.get_ltst_exchrate(v_entrdCurrID, v_funcCurrID, v_lnDte, p_orgid);
     v_accntCurrRate := accb.get_ltst_exchrate(v_entrdCurrID, v_accntCurrID, v_lnDte, p_orgid);
@@ -2347,6 +2346,11 @@ BEGIN
     v_accntCurrAmnt := (v_accntCurrRate1 * v_grndAmnt);
     v_netAmnt := accb.dbt_or_crdt_accnt_multiplier(v_accntID2, v_isdbtCrdt2) * v_funcCurrAmnt;
     v_isdbtCrdt2 := accb.dbt_or_crdt_accnt(v_accntID2, v_isdbtCrdt2);
+    v_reslt_1 := accb.isTransPrmttd (p_orgid, v_balcngAccntID, v_lnDte, v_netAmnt);
+				IF v_reslt_1 NOT LIKE 'SUCCESS:%' THEN
+					RAISE EXCEPTION
+							USING ERRCODE = 'RHERR', MESSAGE = v_reslt_1, HINT = v_reslt_1;
+				END IF;	
     IF (v_isdbtCrdt2 = 'Debit')
     THEN
         v_reslt_1 := accb.createTransaction(v_balcngAccntID,
