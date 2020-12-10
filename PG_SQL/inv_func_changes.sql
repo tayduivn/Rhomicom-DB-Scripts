@@ -1955,3 +1955,496 @@ BEGIN
       RETURN 'ERROR:createPyblsDocDet' || SQLERRM;
 END;
 $BODY$;
+
+
+CREATE OR REPLACE FUNCTION accb.approve_pyblrcvbldoc(
+	p_dochdrid bigint,
+	p_docnum character varying,
+	p_dockind character varying,
+	p_orgid integer,
+	p_who_rn bigint)
+    RETURNS character varying
+    LANGUAGE 'plpgsql'
+    COST 100
+    VOLATILE PARALLEL UNSAFE
+AS $BODY$
+<< outerblock >>
+    DECLARE
+    v_sameprepayCnt  BIGINT                 := 0;
+    rd1              RECORD;
+    msgs             TEXT                   := '';
+    v_reslt_1        TEXT                   := '';
+    v_usrTrnsCode    CHARACTER VARYING(50)  := '';
+    v_dte            CHARACTER VARYING(21)  := '';
+    v_lnDte          CHARACTER VARYING(21)  := '';
+    v_docHdrDesc     CHARACTER VARYING(300) := '';
+    v_docNum         CHARACTER VARYING(100) := '';
+    v_gnrtdTrnsNo1   CHARACTER VARYING(100) := '';
+    v_frstChqNum     CHARACTER VARYING(100) := '';
+    v_ref_doc_number CHARACTER VARYING(100) := '';
+    v_glBatchName    CHARACTER VARYING(100) := '';
+    v_glBatchID      BIGINT                 := -1;
+    v_balcngAccntID  INTEGER                := -1;
+    v_lineTypeNm     CHARACTER VARYING(50)  := '';
+    v_codeBhndID     INTEGER                := -1;
+    v_incrDcrs1      CHARACTER VARYING(50)  := '';
+    v_accntID1       INTEGER                := -1;
+    v_incrDcrs2      CHARACTER VARYING(50)  := '';
+    v_accntID2       INTEGER                := -1;
+    v_isdbtCrdt1     CHARACTER VARYING(50)  := '';
+    v_isdbtCrdt2     CHARACTER VARYING(50)  := '';
+    v_accntID3       INTEGER                := -1;
+    v_incrDcrs3      CHARACTER VARYING(50)  := '';
+    v_netAmnt        NUMERIC                := 0;
+    v_lnAmnt         NUMERIC                := 0;
+    v_acntAmnt       NUMERIC                := 0;
+    v_entrdAmnt      NUMERIC                := 0;
+    v_funcCurrRate   NUMERIC                := 1;
+    v_accntCurrRate  NUMERIC                := 1;
+    v_lneDesc        CHARACTER VARYING(300) := '';
+    v_entrdCurrID    INTEGER                := -1;
+    v_funcCurrID     INTEGER                := -1;
+    v_accntCurrID    INTEGER                := -1;
+    v_grndAmnt       NUMERIC                := 0;
+    v_funcCurrAmnt   NUMERIC                := 0;
+    v_accntCurrAmnt  NUMERIC                := 0;
+    v_accntCurrRate1 NUMERIC                := 1;
+    v_doctype        CHARACTER VARYING(300) := '';
+BEGIN
+    /* 1. Create a GL Batch and get all doc lines
+     * 2. for each line create costing account transaction
+     * 3. create one balancing account transaction using the grand total amount
+     * 4. Check if created gl_batch is balanced.
+     * 5. if balanced update docHdr else delete the gl batch created and throw error message
+     */
+    v_usrTrnsCode := gst.getGnrlRecNm('sec.sec_users', 'user_id', 'code_for_trns_nums', p_who_rn);
+    IF (char_length(v_usrTrnsCode) <= 0)
+    THEN
+        v_usrTrnsCode := 'XX';
+    END IF;
+    v_dte := to_char(now(), 'YYMMDD');
+    IF p_DocHdrID <= 0 THEN
+        RAISE EXCEPTION USING
+            ERRCODE = 'RHERR',
+            MESSAGE = 'No Document to Approve!',
+            HINT = 'No Document to Approve!';
+    END IF;
+    IF p_DocKind = 'Receivables'
+    THEN
+        v_lnDte := gst.getGnrlRecNm('accb.accb_rcvbls_invc_hdr', 'rcvbls_invc_hdr_id', 'rcvbls_invc_date', p_DocHdrID);
+        --msgs := ':' || coalesce(v_lnDte, 'X') || ':'||p_DocHdrID;
+        v_lnDte :=
+                to_char(to_timestamp(substring(v_lnDte, 1, 10) || to_char(now(), ' HH24:MI:SS'),
+                                     'YYYY-MM-DD HH24:MI:SS'),
+                        'DD-Mon-YYYY HH24:MI:SS');
+        --v_accntID1 := 1 / 0;
+        v_docHdrDesc :=
+                gst.getGnrlRecNm('accb.accb_rcvbls_invc_hdr', 'rcvbls_invc_hdr_id', 'comments_desc', p_DocHdrID);
+        v_docNum :=
+                gst.getGnrlRecNm('accb.accb_rcvbls_invc_hdr', 'rcvbls_invc_hdr_id', 'rcvbls_invc_number', p_DocHdrID);
+        v_doctype :=
+                gst.getGnrlRecNm('accb.accb_rcvbls_invc_hdr', 'rcvbls_invc_hdr_id', 'rcvbls_invc_type', p_DocHdrID);
+        v_gnrtdTrnsNo1 := 'RCVBL-' || v_usrTrnsCode || '-' || v_dte || '-';
+        v_reslt_1 := accb.recalcrcvblssmmrys(p_docHdrID, v_doctype, p_who_rn);
+        IF v_reslt_1 NOT LIKE 'SUCCESS:%'
+        THEN
+            RAISE EXCEPTION USING
+                ERRCODE = 'RHERR',
+                MESSAGE = v_reslt_1,
+                HINT = v_reslt_1;
+            RETURN msgs;
+        END IF;
+        UPDATE accb.accb_rcvbls_invc_hdr
+        SET invoice_amount=accb.getRcvblsDocGrndAmnt(p_DocHdrID)
+        WHERE (rcvbls_invc_hdr_id = p_DocHdrID);
+        v_sameprepayCnt := accb.getRcvblsPrepayDocCnt(p_DocHdrID);
+        IF (v_sameprepayCnt > 1) THEN
+            msgs := 'ERROR: Same Prepayment Cannot be Applied More than Once!';
+            RAISE EXCEPTION USING
+                ERRCODE = 'RHERR',
+                MESSAGE = msgs,
+                HINT = msgs;
+            RETURN msgs;
+        END IF;
+    ELSIF p_DocKind = 'Payables'
+    THEN
+        v_lnDte := gst.getGnrlRecNm('accb.accb_pybls_invc_hdr', 'pybls_invc_hdr_id', 'pybls_invc_date', p_DocHdrID);
+        v_lnDte := to_char(to_timestamp(v_lnDte || to_char(now(), ' HH24:MI:SS'), 'YYYY-MM-DD HH24:MI:SS'),
+                           'DD-Mon-YYYY HH24:MI:SS');
+        v_docHdrDesc := gst.getGnrlRecNm('accb.accb_pybls_invc_hdr', 'pybls_invc_hdr_id', 'comments_desc', p_DocHdrID);
+        v_docNum := gst.getGnrlRecNm('accb.accb_pybls_invc_hdr', 'pybls_invc_hdr_id', 'pybls_invc_number', p_DocHdrID);
+        v_doctype := gst.getGnrlRecNm('accb.accb_pybls_invc_hdr', 'pybls_invc_hdr_id', 'pybls_invc_type', p_DocHdrID);
+        v_gnrtdTrnsNo1 := 'PYBL-' || v_usrTrnsCode || '-' || v_dte || '-';
+        v_frstChqNum :=
+                gst.getGnrlRecNm('accb.accb_pybls_invc_hdr', 'pybls_invc_hdr_id', 'firts_cheque_num', p_DocHdrID);
+        v_reslt_1 := accb.recalcpyblssmmrys(p_docHdrID, v_doctype, p_who_rn);
+        IF v_reslt_1 NOT LIKE 'SUCCESS:%'
+        THEN
+            RAISE EXCEPTION USING
+                ERRCODE = 'RHERR',
+                MESSAGE = v_reslt_1 || 'RECLACL',
+                HINT = v_reslt_1 || 'RECLACL';
+            RETURN msgs;
+        END IF;
+        UPDATE accb.accb_pybls_invc_hdr
+        	SET invoice_amount=accb.getPyblsDocGrndAmnt(p_DocHdrID)
+        WHERE (pybls_invc_hdr_id = p_DocHdrID);
+        v_sameprepayCnt := accb.getPyblsPrepayDocCnt(p_DocHdrID);
+        IF (v_sameprepayCnt > 1) THEN
+            msgs := 'ERROR: Same Prepayment Cannot be Applied More than Once!';
+            RAISE EXCEPTION USING
+                ERRCODE = 'RHERR',
+                MESSAGE = msgs,
+                HINT = msgs;
+            RETURN msgs;
+        END IF;
+    END IF;
+
+    v_glBatchName := v_gnrtdTrnsNo1 || lpad(
+            ((gst.getRecCount_LstNum('accb.accb_trnsctn_batches', 'batch_name', 'batch_id',
+                                     v_gnrtdTrnsNo1 || '%') + 1) || ''), 3, '0');
+
+    v_glBatchID := gst.getGnrlRecID1('accb.accb_trnsctn_batches', 'batch_name', 'batch_id', v_glBatchName, p_orgid);
+
+    IF (v_glBatchID <= 0)
+    THEN
+        v_reslt_1 := accb.createBatch(p_orgid, v_glBatchName,
+                                      v_docHdrDesc || ' (' || v_docNum || ')',
+                                      p_DocKind || ' Invoice Document', 'VALID', -1, '0', p_who_rn);
+        IF v_reslt_1 NOT LIKE 'SUCCESS:%'
+        THEN
+            RAISE EXCEPTION USING
+                ERRCODE = 'RHERR',
+                MESSAGE = 'BATCH CREATION FAILED',
+                HINT = 'Journal Batch could not be created!';
+            RETURN msgs;
+        END IF;
+    ELSE
+        RETURN 'ERROR:New GL Batch Number Exists! Try Again Later!';
+    END IF;
+
+    v_glBatchID := gst.getGnrlRecID1('accb.accb_trnsctn_batches', 'batch_name', 'batch_id', v_glBatchName, p_orgid);
+    v_balcngAccntID := -1;
+    IF p_DocKind = 'Receivables'
+    THEN
+        FOR rd1 IN SELECT rcvbl_smmry_id,
+                          rcvbl_smmry_type,
+                          rcvbl_smmry_desc,
+                          rcvbl_smmry_amnt,
+                          code_id_behind,
+                          auto_calc,
+                          incrs_dcrs1,
+                          rvnu_acnt_id,
+                          incrs_dcrs2,
+                          rcvbl_acnt_id,
+                          appld_prepymnt_doc_id,
+                          entrd_curr_id,
+                          gst.get_pssbl_val(a.entrd_curr_id),
+                          func_curr_id,
+                          gst.get_pssbl_val(a.func_curr_id),
+                          accnt_curr_id,
+                          gst.get_pssbl_val(a.accnt_curr_id),
+                          func_curr_rate,
+                          accnt_curr_rate,
+                          rcvbl_smmry_amnt * func_curr_rate  func_curr_amount,
+                          rcvbl_smmry_amnt * accnt_curr_rate accnt_curr_amnt,
+                          ref_doc_number
+                   FROM accb.accb_rcvbl_amnt_smmrys a
+                   WHERE ((a.src_rcvbl_hdr_id = p_DocHdrID) AND (a.rcvbl_smmry_type != '6Grand Total' AND
+                                                                 a.rcvbl_smmry_type != '7Total Payments Made' AND
+                                                                 a.rcvbl_smmry_type != '8Outstanding Balance'))
+                   ORDER BY rcvbl_smmry_type ASC
+            LOOP
+                v_lineTypeNm := rd1.rcvbl_smmry_type;
+                v_codeBhndID := rd1.code_id_behind;
+                v_incrDcrs1 := substr(rd1.incrs_dcrs1, 1, 1);
+                v_accntID1 := rd1.rvnu_acnt_id;
+                v_isdbtCrdt1 := accb.dbt_or_crdt_accnt(v_accntID1, v_incrDcrs1);
+
+                v_incrDcrs2 := substr(rd1.incrs_dcrs2, 1, 1);
+                v_accntID2 := rd1.rcvbl_acnt_id;
+                v_balcngAccntID := v_accntID2;
+                v_entrdAmnt := rd1.rcvbl_smmry_amnt;
+                IF v_lineTypeNm = '1Initial Amount' THEN
+                    v_incrDcrs3 := v_incrDcrs2;
+                    v_accntID3 := v_accntID2;
+                end if;
+                v_lnAmnt := rd1.func_curr_amount;
+
+                v_acntAmnt := rd1.accnt_curr_amnt;
+
+                v_lneDesc := rd1.rcvbl_smmry_desc;
+                v_entrdCurrID := rd1.entrd_curr_id;
+                v_funcCurrID := rd1.func_curr_id;
+                v_accntCurrID := rd1.accnt_curr_id;
+                v_funcCurrRate := rd1.func_curr_rate;
+                v_accntCurrRate := rd1.accnt_curr_rate;
+                v_ref_doc_number := rd1.ref_doc_number;
+                IF char_length(v_ref_doc_number) <= 0 AND char_length(v_frstChqNum) > 0
+                THEN
+                    v_ref_doc_number := v_frstChqNum;
+                END IF;
+                IF (v_accntID1 > 0 AND (v_lnAmnt != 0 OR v_acntAmnt != 0) AND char_length(v_incrDcrs1) > 0 AND
+                    char_length(v_lneDesc) > 0)
+                THEN
+                    v_netAmnt := accb.dbt_or_crdt_accnt_multiplier(v_accntID1, v_incrDcrs1) * v_lnAmnt;
+					
+					v_reslt_1 := accb.isTransPrmttd (p_orgid, v_accntID1, v_lnDte, v_netAmnt);
+					IF v_reslt_1 NOT LIKE 'SUCCESS:%' THEN
+						RAISE EXCEPTION
+								USING ERRCODE = 'RHERR', MESSAGE = v_reslt_1, HINT = v_reslt_1;
+					END IF;	
+                    IF (v_isdbtCrdt1 = 'Debit')
+                    THEN
+                        v_reslt_1 := accb.createTransaction(v_accntID1,
+                                                            v_lneDesc, v_lnAmnt,
+                                                            v_lnDte, v_funcCurrID, v_glBatchID, 0.00,
+                                                            v_netAmnt, ',', v_entrdAmnt, v_entrdCurrID, v_acntAmnt,
+                                                            v_accntCurrID, v_funcCurrRate, v_accntCurrRate, 'D', '',
+                                                            p_DocKind || ' Invoice', rd1.rcvbl_smmry_id, p_who_rn);
+                    ELSE
+                        v_reslt_1 := accb.createTransaction(v_accntID1,
+                                                            v_lneDesc, 0.00,
+                                                            v_lnDte, v_funcCurrID,
+                                                            v_glBatchID, v_lnAmnt, v_netAmnt, ',',
+                                                            v_entrdAmnt, v_entrdCurrID, v_acntAmnt, v_accntCurrID,
+                                                            v_funcCurrRate, v_accntCurrRate, 'C', '',
+                                                            p_DocKind || ' Invoice',
+                                                            rd1.rcvbl_smmry_id, p_who_rn);
+                    END IF;
+                    v_funcCurrAmnt := v_funcCurrAmnt + v_lnAmnt;
+                    v_grndAmnt := v_grndAmnt + v_entrdAmnt;
+                    IF v_reslt_1 NOT LIKE 'SUCCESS:%'
+                    THEN
+                        RAISE EXCEPTION USING
+                            ERRCODE = 'RHERR',
+                            MESSAGE = 'BATCH TRANSACTION CREATION FAILED',
+                            HINT = 'Journal Batch Transaction could not be created!';
+                        RETURN msgs;
+                    END IF;
+                END IF;
+            END LOOP;
+    ELSIF p_DocKind = 'Payables'
+    THEN
+        FOR rd1 IN SELECT pybls_smmry_id,
+                          pybls_smmry_type,
+                          pybls_smmry_desc,
+                          pybls_smmry_amnt,
+                          code_id_behind,
+                          auto_calc,
+                          incrs_dcrs1,
+                          asset_expns_acnt_id,
+                          incrs_dcrs2,
+                          liability_acnt_id,
+                          appld_prepymnt_doc_id,
+                          entrd_curr_id,
+                          gst.get_pssbl_val(a.entrd_curr_id),
+                          func_curr_id,
+                          gst.get_pssbl_val(a.func_curr_id),
+                          accnt_curr_id,
+                          gst.get_pssbl_val(a.accnt_curr_id),
+                          func_curr_rate,
+                          accnt_curr_rate,
+                          pybls_smmry_amnt * func_curr_rate  func_curr_amount,
+                          pybls_smmry_amnt * accnt_curr_rate accnt_curr_amnt,
+                          ref_doc_number
+                   FROM accb.accb_pybls_amnt_smmrys a
+                   WHERE ((a.src_pybls_hdr_id = p_DocHdrID) AND (a.pybls_smmry_type != '6Grand Total' AND
+                                                                 a.pybls_smmry_type != '7Total Payments Made' AND
+                                                                 a.pybls_smmry_type != '8Outstanding Balance'))
+                   ORDER BY pybls_smmry_type ASC
+            LOOP
+                v_lineTypeNm := rd1.pybls_smmry_type;
+                v_codeBhndID := rd1.code_id_behind;
+                v_incrDcrs1 := substr(rd1.incrs_dcrs1, 1, 1);
+                v_accntID1 := rd1.asset_expns_acnt_id;
+                v_isdbtCrdt1 := accb.dbt_or_crdt_accnt(v_accntID1, v_incrDcrs1);
+
+                v_incrDcrs2 := substr(rd1.incrs_dcrs2, 1, 1);
+                v_accntID2 := rd1.liability_acnt_id;
+                v_balcngAccntID := v_accntID2;
+                IF v_lineTypeNm = '1Initial Amount' THEN
+                    v_incrDcrs3 := v_incrDcrs2;
+                    v_accntID3 := v_accntID2;
+                end if;
+                v_isdbtCrdt2 := accb.dbt_or_crdt_accnt(v_accntID2, v_incrDcrs2);
+                v_lnAmnt := rd1.func_curr_amount;
+                v_acntAmnt := rd1.accnt_curr_amnt;
+                v_entrdAmnt := rd1.pybls_smmry_amnt;
+
+                v_lneDesc := rd1.pybls_smmry_desc;
+                v_entrdCurrID := rd1.entrd_curr_id;
+                v_funcCurrID := rd1.func_curr_id;
+                v_accntCurrID := rd1.accnt_curr_id;
+                v_funcCurrRate := rd1.func_curr_rate;
+                v_accntCurrRate := rd1.accnt_curr_rate;
+                v_ref_doc_number := rd1.ref_doc_number;
+                IF char_length(v_ref_doc_number) <= 0 AND char_length(v_frstChqNum) > 0
+                THEN
+                    v_ref_doc_number := v_frstChqNum;
+                END IF;
+                IF (v_accntID1 > 0 AND (v_lnAmnt != 0 OR v_acntAmnt != 0) AND char_length(v_incrDcrs1) > 0 AND
+                    char_length(v_lneDesc) > 0)
+                THEN
+                    v_netAmnt := accb.dbt_or_crdt_accnt_multiplier(v_accntID1, v_incrDcrs1) * v_lnAmnt;
+	
+				v_reslt_1 := accb.isTransPrmttd (p_orgid, v_accntID1, v_lnDte, v_netAmnt);
+				IF v_reslt_1 NOT LIKE 'SUCCESS:%' THEN
+					RAISE EXCEPTION
+							USING ERRCODE = 'RHERR', MESSAGE = v_reslt_1, HINT = v_reslt_1;
+				END IF;	
+                    IF (v_isdbtCrdt1 = 'Debit')
+                    THEN
+                        v_reslt_1 := accb.createTransaction(v_accntID1,
+                                                            v_lneDesc, v_lnAmnt,
+                                                            v_lnDte, v_funcCurrID, v_glBatchID, 0.00,
+                                                            v_netAmnt, ',', v_entrdAmnt, v_entrdCurrID, v_acntAmnt,
+                                                            v_accntCurrID, v_funcCurrRate, v_accntCurrRate, 'D', '',
+                                                            p_DocKind || ' Invoice', rd1.pybls_smmry_id, p_who_rn);
+                    ELSE
+                        v_reslt_1 := accb.createTransaction(v_accntID1,
+                                                            v_lneDesc, 0.00,
+                                                            v_lnDte, v_funcCurrID,
+                                                            v_glBatchID, v_lnAmnt, v_netAmnt, ',',
+                                                            v_entrdAmnt, v_entrdCurrID, v_acntAmnt, v_accntCurrID,
+                                                            v_funcCurrRate, v_accntCurrRate, 'C', '',
+                                                            p_DocKind || ' Invoice',
+                                                            rd1.pybls_smmry_id, p_who_rn);
+                    END IF;
+                    v_funcCurrAmnt := v_funcCurrAmnt + v_lnAmnt;
+                    v_grndAmnt := v_grndAmnt + v_entrdAmnt;
+                    IF v_reslt_1 NOT LIKE 'SUCCESS:%'
+                    THEN
+                        RAISE EXCEPTION USING
+                            ERRCODE = 'RHERR',
+                            MESSAGE = 'BATCH TRANSACTION CREATION FAILED ' || v_reslt_1,
+                            HINT = 'Journal Batch Transaction could not be created! ' || v_reslt_1;
+                        RETURN msgs;
+                    END IF;
+                END IF;
+            END LOOP;
+    END IF;
+
+    --Balancing Leg
+
+    v_accntCurrID := gst.getGnrlRecNm('accb.accb_chart_of_accnts', 'accnt_id', 'crncy_id', v_balcngAccntID) :: INTEGER;
+    v_funcCurrRate := accb.get_ltst_exchrate(v_entrdCurrID, v_funcCurrID, v_lnDte, p_orgid);
+    v_accntCurrRate := accb.get_ltst_exchrate(v_entrdCurrID, v_accntCurrID, v_lnDte, p_orgid);
+    v_accntID2 := v_accntID3;
+    IF p_DocKind = 'Receivables'
+    THEN
+        v_isdbtCrdt2 := 'I';
+        v_isdbtCrdt2 := v_incrDcrs3;
+        v_grndAmnt := accb.getRcvblsDocGrndAmnt(p_DocHdrID);
+        v_funcCurrAmnt := accb.getRcvblsDocFuncAmnt(p_DocHdrID);
+    ELSIF p_DocKind = 'Payables'
+    THEN
+        v_isdbtCrdt2 := 'I';
+        v_isdbtCrdt2 := v_incrDcrs3;
+        v_grndAmnt := accb.getPyblsDocGrndAmnt(p_DocHdrID);
+        v_funcCurrAmnt = accb.getPyblsDocFuncAmnt(p_DocHdrID);
+    END IF;
+    v_accntCurrAmnt := (v_accntCurrRate1 * v_grndAmnt);
+    v_netAmnt := accb.dbt_or_crdt_accnt_multiplier(v_accntID2, v_isdbtCrdt2) * v_funcCurrAmnt;
+    v_isdbtCrdt2 := accb.dbt_or_crdt_accnt(v_accntID2, v_isdbtCrdt2);
+    IF (v_isdbtCrdt2 = 'Debit')
+    THEN
+        v_reslt_1 := accb.createTransaction(v_balcngAccntID,
+                                            v_docHdrDesc ||
+                                            ' (Balacing Leg for ' || p_DocKind || ' Doc:-' ||
+                                            v_docNum || ')', v_funcCurrAmnt,
+                                            v_lnDte, v_funcCurrID, v_glBatchID, 0.00,
+                                            v_netAmnt, ',', v_grndAmnt, v_entrdCurrID,
+                                            v_accntCurrAmnt, v_accntCurrID, v_funcCurrRate, v_accntCurrRate, 'D', '',
+                                            p_DocKind || ' Invoice', -1, p_who_rn);
+    ELSE
+        v_reslt_1 := accb.createTransaction(v_balcngAccntID,
+                                            v_docHdrDesc ||
+                                            ' (Balacing Leg for ' || p_DocKind || ' Doc:-' ||
+                                            v_docNum || ')', 0.00,
+                                            v_lnDte, v_funcCurrID,
+                                            v_glBatchID, v_funcCurrAmnt, v_netAmnt, ',',
+                                            v_grndAmnt, v_entrdCurrID, v_accntCurrAmnt,
+                                            v_accntCurrID, v_funcCurrRate, v_accntCurrRate, 'C', '',
+                                            p_DocKind || ' Invoice', -1, p_who_rn);
+    END IF;
+    IF v_reslt_1 NOT LIKE 'SUCCESS:%'
+    THEN
+        RAISE EXCEPTION USING
+            ERRCODE = 'RHERR',
+            MESSAGE = 'BALANCING TRANSACTION CREATION FAILED ' || v_reslt_1,
+            HINT = 'BALANCING Transaction could not be created! ' || v_reslt_1;
+        RETURN msgs;
+    END IF;
+    msgs := 'CR:' || accb.get_Batch_CrdtSum(v_glBatchID) || ':DR:' || accb.get_Batch_DbtSum(v_glBatchID);
+    --v_balcngAccntID := 1 / 0;
+    IF (accb.get_Batch_CrdtSum(v_glBatchID) = accb.get_Batch_DbtSum(v_glBatchID))
+    THEN
+        IF p_DocKind = 'Receivables'
+        THEN
+            UPDATE accb.accb_rcvbls_invc_hdr
+            SET gl_batch_id      = v_glBatchID,
+                last_update_by   = p_who_rn,
+                last_update_date = to_char(now(), 'YYYY-MM-DD HH24:MI:SS')
+            WHERE (rcvbls_invc_hdr_id = p_DocHdrID);
+
+            UPDATE accb.accb_trnsctn_batches
+            SET avlbl_for_postng = '1',
+                last_update_by   = p_who_rn,
+                last_update_date = to_char(now(), 'YYYY-MM-DD HH24:MI:SS')
+            WHERE batch_id = v_glBatchID;
+
+            UPDATE accb.accb_rcvbls_invc_hdr
+            SET approval_status     = 'Approved',
+                last_update_by      = p_who_rn,
+                last_update_date    = to_char(now(), 'YYYY-MM-DD HH24:MI:SS'),
+                next_aproval_action = 'Cancel'
+            WHERE (rcvbls_invc_hdr_id = p_DocHdrID);
+        ELSIF p_DocKind = 'Payables'
+        THEN
+            UPDATE accb.accb_pybls_invc_hdr
+            SET gl_batch_id      = v_glBatchID,
+                last_update_by   = p_who_rn,
+                last_update_date = to_char(now(), 'YYYY-MM-DD HH24:MI:SS')
+            WHERE (pybls_invc_hdr_id = p_DocHdrID);
+
+            UPDATE accb.accb_trnsctn_batches
+            SET avlbl_for_postng = '1',
+                last_update_by   = p_who_rn,
+                last_update_date = to_char(now(), 'YYYY-MM-DD HH24:MI:SS')
+            WHERE batch_id = v_glBatchID;
+
+            UPDATE accb.accb_pybls_invc_hdr
+            SET approval_status     = 'Approved',
+                last_update_by      = p_who_rn,
+                last_update_date    = to_char(now(), 'YYYY-MM-DD HH24:MI:SS'),
+                next_aproval_action = 'Cancel'
+            WHERE (pybls_invc_hdr_id = p_DocHdrID);
+        END IF;
+    ELSE
+        msgs := 'ERROR:The GL Batch created is not Balanced!Transactions created will be reversed and deleted! ' ||
+                msgs;
+        DELETE FROM accb.accb_trnsctn_details WHERE (batch_id = v_glBatchID);
+        DELETE FROM accb.accb_trnsctn_batches WHERE (batch_id = v_glBatchID);
+        UPDATE accb.accb_trnsctn_batches
+        SET batch_vldty_status = 'VALID'
+        WHERE batch_id IN (SELECT h.batch_id
+                           FROM accb.accb_trnsctn_batches h
+                           WHERE batch_vldty_status = 'VOID'
+                             AND NOT EXISTS(SELECT g.batch_id
+                                            FROM accb.accb_trnsctn_batches g
+                                            WHERE h.batch_id = g.src_batch_id));
+        RAISE EXCEPTION USING
+            ERRCODE = 'RHERR',
+            MESSAGE = msgs,
+            HINT = msgs;
+        RETURN msgs;
+    END IF;
+    RETURN 'SUCCESS: ' || p_DocKind || ' Document Approved!';
+EXCEPTION
+    WHEN OTHERS
+        THEN
+            msgs := msgs || v_reslt_1;
+            RETURN 'ERROR:' || p_DocKind || 'APPROVAL:' || SQLERRM || ' [' || msgs || ']';
+END;
+$BODY$;
