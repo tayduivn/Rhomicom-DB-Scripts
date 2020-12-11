@@ -1,6 +1,12 @@
 --DROP SCHEMA hosp CASCADE;
 --CREATE OR REPLACE FUNCTION
 --CREATE FUNCTION
+ALTER TABLE accb.accb_fa_assets_rgstr
+    ADD COLUMN rvnu_accnt_id integer NOT NULL DEFAULT -1;
+
+ALTER TABLE accb.accb_fa_assets_rgstr
+    ADD COLUMN mntnc_exp_accnt_id integer NOT NULL DEFAULT -1;
+	
 ALTER TABLE scm.scm_cnsmr_credit_analys ADD branch_loc_id integer NOT NULL DEFAULT -1;
 ALTER TABLE scm.scm_cnsmr_credit_analys ADD dflt_rcvbl_account_id integer NOT NULL DEFAULT -1;
 
