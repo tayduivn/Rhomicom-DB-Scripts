@@ -16,4 +16,4 @@ AND f.accnt_id NOT IN (Select y.accnt_id
 					   FROM accb.accb_trnsctn_details y,
 					  		accb.accb_trnsctn_batches x
 					  WHERE x.batch_id = y.batch_id 
-					   AND x.org_id = f.org_id)
+					   AND x.org_id = f.org_id);
