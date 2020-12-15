@@ -1,3 +1,47 @@
+CREATE OR REPLACE FUNCTION pay.get_payitm_expctd_amnt(
+	p_itm_id integer,
+	p_prsn_id bigint,
+	p_org_id integer,
+	p_datestr character varying)
+    RETURNS numeric
+    LANGUAGE 'plpgsql'
+    COST 100
+    VOLATILE PARALLEL UNSAFE
+AS $BODY$
+<< outerblock >>
+  DECLARE
+  --p_dateStr MUST BE YYYY-MM-DD
+  valamnt    NUMERIC :=0.00;
+  p_itmValID BIGINT :=-1;
+  val_sql    TEXT;
+BEGIN
+  p_itmValID := pay.get_prsn_itmval_id(p_itm_id, p_prsn_id);
+  IF coalesce(p_itmValID,-1) <=0 THEN
+	p_itmValID := pay.get_first_itmval_id(p_itm_id);
+  END IF;
+
+  SELECT pssbl_value_sql
+  INTO val_sql
+  FROM org.org_pay_items_values
+  WHERE pssbl_value_id = p_itmValID;
+
+  IF coalesce(val_sql,'') = ''
+  THEN
+    SELECT pssbl_amount
+    INTO valamnt
+    FROM org.org_pay_items_values
+    WHERE pssbl_value_id = p_itmValID;
+  ELSE
+    valamnt := pay.exct_itm_valsql(val_sql, p_prsn_id, p_org_id, p_dateStr);
+  END IF;
+  RETURN COALESCE(valamnt, 0);
+  EXCEPTION
+  WHEN OTHERS
+    THEN
+      RETURN 0;
+END;
+$BODY$;
+
 CREATE OR REPLACE FUNCTION pay.get_ltst_paiditem_val_b4 (p_personid bigint, p_pay_itm_id bigint, p_trns_date character varying)
 	RETURNS numeric
 	LANGUAGE 'sql'
